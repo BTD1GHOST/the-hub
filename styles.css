@@ -3,7 +3,6 @@
   --bg0:#070A14;
   --bg1:#0B1030;
   --card: rgba(255,255,255,.06);
-  --card2: rgba(255,255,255,.09);
   --stroke: rgba(255,255,255,.10);
   --text:#EAEAFF;
   --muted: rgba(234,234,255,.65);
@@ -20,7 +19,7 @@
 html,body{height:100%}
 body{
   margin:0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
   color:var(--text);
   background:
     radial-gradient(1100px 600px at 85% 35%, rgba(139,92,255,.35), transparent 55%),
@@ -30,34 +29,11 @@ body{
   overflow-x:hidden;
 }
 
-a{color:inherit}
-.container{
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 22px 18px 40px;
-}
+.container{max-width:1100px;margin:0 auto;padding:22px 18px 40px}
 
-.topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:14px;
-  margin-bottom: 18px;
-}
-
-.brand{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  font-weight:700;
-  letter-spacing:.2px;
-}
-.brandRow{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin-bottom: 6px;
-}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700}
+.brandRow{display:flex;align-items:center;gap:10px;margin-bottom:6px}
 .brandText{font-weight:800}
 
 .logo{
@@ -66,34 +42,21 @@ a{color:inherit}
   box-shadow: 0 10px 30px rgba(139,92,255,.35);
   display:grid;place-items:center;
 }
-.logo::after{
-  content:"";
-  width:14px;height:14px;border-radius:4px;
-  background: rgba(255,255,255,.85);
-  opacity:.9;
-}
+.logo::after{content:"";width:14px;height:14px;border-radius:4px;background:rgba(255,255,255,.85);opacity:.9}
 
 .pill{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding: 7px 12px;
-  border-radius: 999px;
+  display:inline-flex;align-items:center;gap:8px;
+  padding:7px 12px;border-radius:999px;
   border:1px solid var(--stroke);
   background: rgba(255,255,255,.05);
   color: var(--muted);
   backdrop-filter: blur(10px);
 }
 
-.actions{
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
+.actions{display:flex;align-items:center;gap:10px}
 
 .iconbtn{
-  width:40px;height:40px;
-  border-radius: 12px;
+  width:40px;height:40px;border-radius:12px;
   border:1px solid var(--stroke);
   background: rgba(255,255,255,.05);
   backdrop-filter: blur(10px);
@@ -105,44 +68,25 @@ a{color:inherit}
 .iconbtn:hover{transform: translateY(-1px); background: rgba(255,255,255,.07)}
 .iconbtn:active{transform: translateY(0px) scale(.98)}
 
-.hero{
-  padding: 14px 0 10px;
-}
-.h1{
-  font-size: 38px;
-  line-height: 1.05;
-  margin: 6px 0 6px;
-}
-.h1 .accent{color: var(--purple2)}
-.sub{
-  margin:0;
-  color: var(--muted);
-}
+.hero{padding:14px 0 10px}
+.h1{font-size:38px;line-height:1.05;margin:6px 0 6px}
+.h1 .accent{color:var(--purple2)}
+.sub{margin:0;color:var(--muted)}
 
 .tabbar{
-  margin: 18px 0 22px;
-  display:flex;
-  gap:10px;
-  padding: 10px;
-  border-radius: 16px;
-  border:1px solid var(--stroke);
+  margin:18px 0 22px;
+  display:flex;gap:10px;padding:10px;
+  border-radius:16px;border:1px solid var(--stroke);
   background: rgba(255,255,255,.04);
   backdrop-filter: blur(12px);
   width: fit-content;
   flex-wrap: wrap;
 }
-
 .tab{
-  border:0;
-  background: transparent;
-  color: var(--muted);
-  padding: 10px 12px;
-  border-radius: 14px;
-  cursor:pointer;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  transition: background .12s ease, color .12s ease, transform .12s ease;
+  border:0;background:transparent;color:var(--muted);
+  padding:10px 12px;border-radius:14px;cursor:pointer;
+  display:flex;align-items:center;gap:8px;
+  transition: background .12s ease, color .12s ease;
 }
 .tab:hover{background: rgba(255,255,255,.06); color: var(--text)}
 .tab.active{
@@ -151,40 +95,22 @@ a{color:inherit}
   border: 1px solid rgba(139,92,255,.35);
 }
 
-.grid{
-  display:grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-}
+.grid{display:grid;grid-template-columns:1fr;gap:14px}
 
 .card{
-  border-radius: var(--radius);
-  border: 1px solid var(--stroke);
-  background: var(--card);
+  border-radius:var(--radius);
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.06);
   backdrop-filter: blur(14px);
   box-shadow: var(--shadow);
-  padding: 16px;
+  padding:16px;
 }
-
-.cardHead{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom: 10px;
-}
-.cardTitle{
-  font-size: 20px;
-  font-weight: 800;
-  display:flex;align-items:center;gap:10px;
-}
+.cardHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.cardTitle{font-size:20px;font-weight:800}
 
 .btn{
-  border:0;
-  cursor:pointer;
-  border-radius: 14px;
-  padding: 10px 14px;
-  color: white;
+  border:0;cursor:pointer;border-radius:14px;
+  padding:10px 14px;color:white;
   background: linear-gradient(135deg, var(--purple), #3A63FF);
   box-shadow: 0 16px 40px rgba(139,92,255,.25);
   transition: transform .12s ease, filter .12s ease;
@@ -198,93 +124,67 @@ a{color:inherit}
   box-shadow:none;
 }
 
-.empty{
-  color: var(--muted);
-  text-align:center;
-  padding: 28px 10px;
-}
+.empty{color:var(--muted);text-align:center;padding:28px 10px}
 
-.row{
-  display:flex; gap:10px; flex-wrap:wrap;
-}
+.row{display:flex;gap:10px;flex-wrap:wrap}
 .input{
-  width: 100%;
-  border-radius: 14px;
-  border: 1px solid var(--stroke);
+  width:100%;
+  border-radius:14px;border:1px solid var(--stroke);
   background: rgba(0,0,0,.25);
   color: var(--text);
-  padding: 12px 12px;
+  padding:12px 12px;
   outline:none;
 }
 .input::placeholder{color: rgba(234,234,255,.45)}
+.textarea{min-height:150px;resize:vertical}
 
-.textarea{
-  min-height: 150px;
-  resize: vertical;
+.hint{margin-top:10px;color:rgba(234,234,255,.75);font-size:13px}
+.mutedNote{margin-top:10px;color:rgba(234,234,255,.55);font-size:13px;line-height:1.4}
+
+/* Upload row */
+.uploadRow{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:10px;
+  border-radius:14px;
+  border:1px dashed rgba(255,255,255,.14);
+  background: rgba(255,255,255,.03);
 }
-
-.hint{
-  margin-top: 10px;
-  color: rgba(234,234,255,.75);
-  font-size: 13px;
+.file{
+  width:100%;
+  border-radius:12px;
+  border:1px solid var(--stroke);
+  padding:10px;
+  background: rgba(0,0,0,.25);
+  color: var(--muted);
 }
+.fileHint{font-size:13px;color:rgba(234,234,255,.55)}
 
-.mutedNote{
-  margin-top: 10px;
-  color: rgba(234,234,255,.55);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-/* ===== Modal ===== */
+/* Modal */
 .modalOverlay{
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
+  position:fixed;inset:0;
+  display:grid;place-items:center;
   background: rgba(0,0,0,.55);
   backdrop-filter: blur(6px);
-  z-index: 9999;
-  padding: 18px;
+  z-index:9999;
+  padding:18px;
 }
 .modal{
-  width: min(720px, 100%);
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,.14);
+  width:min(720px, 100%);
+  border-radius:20px;
+  border:1px solid rgba(255,255,255,.14);
   background: rgba(14,18,45,.75);
   box-shadow: 0 24px 80px rgba(0,0,0,.65);
   backdrop-filter: blur(14px);
-  padding: 14px;
+  padding:14px;
 }
-.modalHead{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-  padding: 4px 4px 10px;
-}
-.modalTitle{
-  font-size: 18px;
-  font-weight: 900;
-}
-.modalBody{
-  display:flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 6px 4px 10px;
-}
-.modalActions{
-  display:flex;
-  justify-content:flex-end;
-  gap: 10px;
-  padding: 6px 4px 4px;
-}
+.modalHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 4px 10px}
+.modalTitle{font-size:18px;font-weight:900}
+.modalBody{display:flex;flex-direction:column;gap:10px;padding:6px 4px 10px}
+.modalActions{display:flex;justify-content:flex-end;gap:10px;padding:6px 4px 4px}
 
 @media (min-width: 860px){
   .grid{grid-template-columns: 1.2fr .8fr}
 }
-
-.authCard{
-  max-width: 520px;
-  margin: 0 auto;
-}
+.authCard{max-width:520px;margin:0 auto}
