@@ -19,7 +19,11 @@ import {
   doc,
   setDoc,
   getDoc,
-  updateDoc
+  updateDoc,
+  collection,
+  getDocs,
+  query,
+  orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ===== YOUR Firebase config (PASTE YOUR REAL VALUES HERE) =====
