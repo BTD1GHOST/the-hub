@@ -1,6 +1,9 @@
 // ===============================
-// THE HUB — app.js (v9 FULL COPY/PASTE)
-// Realtime School/Media posts + Admin approvals + Realtime Chat (The Boys)
+// THE HUB — app.js (v10 FULL COPY/PASTE)
+// Fixes:
+// 1) Non-admin posts are ALWAYS pending (approval required)
+// 2) Click any post -> full view modal
+// 3) Admin can delete chat messages (button visible to admins)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -106,6 +109,13 @@ const postTextInput = document.getElementById("postText");
 const postFileInput = document.getElementById("postFile");
 const fileHint = document.getElementById("fileHint");
 
+// Post full view
+const postViewOverlay = document.getElementById("postViewOverlay");
+const postViewTitle = document.getElementById("postViewTitle");
+const postViewMeta = document.getElementById("postViewMeta");
+const postViewText = document.getElementById("postViewText");
+const postViewFile = document.getElementById("postViewFile");
+
 // ===============================
 // State
 // ===============================
@@ -120,6 +130,9 @@ let unsubAdminUsers = null;
 let unsubAdminPendingPosts = null;
 let unsubChat = null;
 
+// Cache for clickable posts
+let postCache = {}; // { [id]: postData }
+
 // ===============================
 // Helpers
 // ===============================
@@ -128,19 +141,23 @@ function showOnly(which) {
   if (pendingScreen) pendingScreen.style.display = which === "pending" ? "flex" : "none";
   if (appScreen) appScreen.style.display = which === "app" ? "block" : "none";
 }
+
 function setHint(msg) {
   if (!authHint) return;
   authHint.textContent = msg || "";
 }
+
 function escapeHTML(str) {
   return String(str || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
+
 function isAdmin() {
   return currentUserProfile?.role === "admin" || currentUserProfile?.role === "owner";
 }
+
 function cleanupRealtime() {
   if (unsubPosts) unsubPosts();
   if (unsubPendingCount) unsubPendingCount();
@@ -149,12 +166,14 @@ function cleanupRealtime() {
   if (unsubChat) unsubChat();
   unsubPosts = unsubPendingCount = unsubAdminUsers = unsubAdminPendingPosts = unsubChat = null;
 }
+
 function tsMs(ts) {
   if (!ts) return 0;
   if (typeof ts.toMillis === "function") return ts.toMillis();
   if (typeof ts.seconds === "number") return ts.seconds * 1000;
   return 0;
 }
+
 function renderFilePreview(url, type) {
   const safeUrl = escapeHTML(url);
   const isImage = (type || "").startsWith("image/");
@@ -173,6 +192,39 @@ function renderFilePreview(url, type) {
   }
   return `<div style="margin-top:10px;"><a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open file</a></div>`;
 }
+
+// ===============================
+// Full view modal
+// ===============================
+window.closePostView = function () {
+  if (postViewOverlay) postViewOverlay.style.display = "none";
+};
+
+window.openPostView = function (postId) {
+  const p = postCache[postId];
+  if (!p) return;
+
+  if (postViewTitle) postViewTitle.textContent = p.title || "Post";
+  const when = p.createdAt ? new Date(tsMs(p.createdAt)).toLocaleString() : "";
+  if (postViewMeta) {
+    postViewMeta.textContent = `${p.createdByEmail || "unknown"} • ${when} • ${String(p.section || "").toUpperCase()}`;
+  }
+  if (postViewText) postViewText.textContent = p.text || "";
+
+  if (postViewFile) {
+    postViewFile.innerHTML = p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : "";
+  }
+
+  if (postViewOverlay) postViewOverlay.style.display = "grid";
+};
+
+// Click handling for posts (event delegation)
+document.addEventListener("click", (e) => {
+  const card = e.target?.closest?.("[data-postid]");
+  if (!card) return;
+  const postId = card.getAttribute("data-postid");
+  if (postId) window.openPostView(postId);
+});
 
 // ===============================
 // AUTH
@@ -230,7 +282,7 @@ window.showTab = function (tab) {
 };
 
 // ===============================
-// Post Composer (modal)
+// Post composer
 // ===============================
 window.openComposer = function () {
   if (currentTab !== "school" && currentTab !== "media") return alert("New is only for School/Media.");
@@ -240,7 +292,7 @@ window.openComposer = function () {
   postTitleInput.value = "";
   postTextInput.value = "";
   postFileInput.value = "";
-  fileHint.textContent = "Optional: attach image/PDF. (Non-admin uploads require approval)";
+  fileHint.textContent = "Optional: attach image/PDF.";
 
   composerOverlay.style.display = "grid";
   postTitleInput.focus();
@@ -253,7 +305,7 @@ window.closeComposer = function () {
 
 postFileInput?.addEventListener("change", () => {
   const f = postFileInput.files?.[0];
-  fileHint.textContent = f ? `Selected: ${f.name}` : "Optional: attach image/PDF. (Non-admin uploads require approval)";
+  fileHint.textContent = f ? `Selected: ${f.name}` : "Optional: attach image/PDF.";
 });
 
 window.submitPost = async function () {
@@ -266,8 +318,10 @@ window.submitPost = async function () {
 
   if (!title && !text && !file) return alert("Write something or attach a file.");
 
-  let status = "approved";
-  if (file && !isAdmin()) status = "pending";
+  // IMPORTANT CHANGE:
+  // - Non-admin => ALWAYS pending (approval required)
+  // - Admin => approved
+  const status = isAdmin() ? "approved" : "pending";
 
   let fileURL = "";
   let fileType = "";
@@ -294,6 +348,11 @@ window.submitPost = async function () {
     });
 
     window.closeComposer();
+
+    // If non-admin, tell them it went pending
+    if (!isAdmin()) {
+      alert("Posted ✅ Sent for approval (pending).");
+    }
   } catch (err) {
     console.error(err);
     alert(err?.message || "Failed to post.");
@@ -301,11 +360,13 @@ window.submitPost = async function () {
 };
 
 // ===============================
-// Realtime Posts
+// Realtime Posts (approved only)
 // ===============================
 function startRealtimePosts(section) {
   if (unsubPosts) unsubPosts();
   sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
+
+  postCache = {};
 
   const q = query(
     collection(db, "posts"),
@@ -318,19 +379,25 @@ function startRealtimePosts(section) {
       sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
       return;
     }
+
     const posts = [];
-    snap.forEach((d) => posts.push({ id: d.id, ...d.data() }));
+    snap.forEach((d) => {
+      const p = { id: d.id, ...d.data() };
+      posts.push(p);
+      postCache[d.id] = p;
+    });
+
     posts.sort((a,b) => tsMs(b.createdAt) - tsMs(a.createdAt));
 
     let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
     for (const p of posts) {
       html += `
-        <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+        <div class="card postCard" data-postid="${escapeHTML(p.id)}" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
           ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
-          ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
-          ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
+          ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5; max-height: 4.2em; overflow:hidden;">${escapeHTML(p.text)}</div>` : ""}
+          ${p.fileURL ? `<div style="margin-top:8px; color:rgba(234,234,255,.55); font-size:12px;">Attachment included • click to view</div>` : ""}
           <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-            Posted by ${escapeHTML(p.createdByEmail || "unknown")}
+            ${escapeHTML(p.createdByEmail || "unknown")} • click to open
           </div>
         </div>
       `;
@@ -389,7 +456,7 @@ function startRealtimeAdminPanel() {
           ${pendingPosts.map(p => `
             <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
               <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-                <div>
+                <div style="flex:1; min-width:260px;">
                   <div style="font-weight:900;">${escapeHTML((p.section || "post").toUpperCase())}</div>
                   ${p.title ? `<div style="margin-top:6px; font-weight:800;">${escapeHTML(p.title)}</div>` : ""}
                   ${p.text ? `<div style="margin-top:6px; color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
@@ -413,11 +480,14 @@ function startRealtimeAdminPanel() {
         const role = u.role || "user";
         const status = u.status || "pending";
         const uid = u.id;
+
         const statusColor =
           status === "approved" ? "var(--good)" :
           status === "pending" ? "var(--warn)" :
           "var(--bad)";
+
         const isOwner = role === "owner";
+
         return `
           <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
             <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
@@ -429,6 +499,7 @@ function startRealtimeAdminPanel() {
                   • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
                 </div>
               </div>
+
               <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                 <select class="input" style="width:auto; padding:10px 12px;"
                   onchange="changeRole('${uid}', this.value)"
@@ -504,7 +575,7 @@ window.changeRole = async function (uid, role) {
 };
 
 // ===============================
-// CHAT — The Boys (room: "theboys")
+// CHAT — The Boys
 // ===============================
 const CHAT_ROOM_ID = "theboys";
 
@@ -549,7 +620,12 @@ function startRealtimeChat() {
     let html = "";
     snap.forEach((d) => {
       const m = d.data();
+      const id = d.id;
       const when = m.createdAt ? new Date(tsMs(m.createdAt)).toLocaleString() : "";
+      const delBtn = isAdmin()
+        ? `<button class="btn danger" style="padding:8px 10px;" onclick="deleteChatMsg('${id}')">Delete</button>`
+        : "";
+
       html += `
         <div class="chatMsg">
           <div style="flex:1;">
@@ -558,6 +634,9 @@ function startRealtimeChat() {
             </div>
             ${m.text ? `<div class="chatText">${escapeHTML(m.text)}</div>` : ""}
             ${m.fileURL ? renderFilePreview(m.fileURL, m.fileType) : ""}
+          </div>
+          <div style="display:flex; align-items:flex-start;">
+            ${delBtn}
           </div>
         </div>
       `;
@@ -600,10 +679,6 @@ window.sendChat = async function () {
       if (hintEl) hintEl.textContent = "Uploaded ✔ sending...";
     }
 
-    // Ensure room doc exists (admins can create it; but this is harmless if already exists)
-    // If rules block non-admin from creating room doc, that’s okay — messages can still be written if room exists.
-    // So we do NOT force-create room doc here.
-
     const msgsRef = collection(db, "rooms", CHAT_ROOM_ID, "messages");
     await addDoc(msgsRef, {
       text,
@@ -622,6 +697,13 @@ window.sendChat = async function () {
     alert(err?.message || "Failed to send.");
     if (hintEl) hintEl.textContent = "Realtime chat • room: The Boys";
   }
+};
+
+window.deleteChatMsg = async function (messageId) {
+  if (!isAdmin()) return;
+  if (!confirm("Delete this message?")) return;
+
+  await deleteDoc(doc(db, "rooms", CHAT_ROOM_ID, "messages", messageId));
 };
 
 // ===============================
@@ -677,9 +759,10 @@ function renderTab() {
         <div style="text-align:left; max-width:520px; margin: 0 auto;">
           <div style="font-weight:900; margin-bottom:8px;">Rules</div>
           <div style="color:rgba(234,234,255,.70); line-height:1.6">
-            • Text-only posts = <b>approved</b><br/>
-            • File uploads = <b>pending</b> unless admin/owner<br/>
-            • Chat is realtime ✅
+            • Non-admin posts = <b>pending approval</b><br/>
+            • Admin posts = <b>instant</b><br/>
+            • Click any post to full-view ✅<br/>
+            • Admin can delete chat messages ✅
           </div>
         </div>
       </div>
