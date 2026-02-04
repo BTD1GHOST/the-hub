@@ -1,19 +1,34 @@
-// ===== Firebase =====
+// ===============================
+// THE HUB — app.js (FREE NOTIFY VERSION)
+// No Cloud Functions
+// 100% free
+// ===============================
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-  getAuth, createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, onAuthStateChanged, signOut
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import {
-  getFirestore, doc, setDoc, getDoc,
-  updateDoc, collection, addDoc,
-  onSnapshot, deleteDoc, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import {
-  getMessaging, getToken, onMessage
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
 
-// ===== Config =====
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  collection,
+  addDoc,
+  onSnapshot,
+  deleteDoc,
+  serverTimestamp,
+  query,
+  orderBy
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// ===== Firebase config =====
 const firebaseConfig = {
   apiKey: "AIzaSyA9Mq0eCDuicDEejmtqCwlWnZ4otvz9FdY",
   authDomain: "the-hub-f09c4.firebaseapp.com",
@@ -25,7 +40,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const messaging = getMessaging(app);
 
 // ===== DOM =====
 const authScreen = document.getElementById("authScreen");
@@ -33,9 +47,12 @@ const pendingScreen = document.getElementById("pendingScreen");
 const appScreen = document.getElementById("appScreen");
 const sectionBody = document.getElementById("sectionBody");
 const adminTab = document.getElementById("adminTab");
+const displayName = document.getElementById("displayName");
+const rolePill = document.getElementById("rolePill");
 
 let currentUserProfile = null;
-let currentTab = "chat";
+let chatUnsub = null;
+let lastMessageTime = 0;
 
 // ===== Helpers =====
 const show = (a,b,c) => {
@@ -47,104 +64,123 @@ const isAdmin = () => currentUserProfile?.role === "admin";
 
 // ===== AUTH =====
 window.signup = async () => {
-  const email = email.value;
-  const password = password.value;
-  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const cred = await createUserWithEmailAndPassword(auth,email,password);
   await setDoc(doc(db,"users",cred.user.uid),{
-    email, role:"user", status:"pending", createdAt:Date.now()
+    email,
+    role:"user",
+    status:"pending",
+    createdAt:Date.now()
   });
 };
 
 window.login = async () => {
-  await signInWithEmailAndPassword(auth,email.value,password.value);
+  await signInWithEmailAndPassword(
+    auth,
+    document.getElementById("email").value,
+    document.getElementById("password").value
+  );
 };
 
 window.logout = async () => signOut(auth);
 
-// ===== NOTIFICATIONS =====
+// ===== FREE NOTIFICATIONS =====
 window.enableNotifications = async () => {
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") return alert("Blocked");
-
-  const token = await getToken(messaging,{
-    vapidKey: "PASTE_YOUR_VAPID_KEY_HERE"
-  });
-
-  await updateDoc(doc(db,"users",auth.currentUser.uid),{
-    pushToken: token
-  });
-
-  alert("Notifications enabled");
+  if (permission !== "granted") {
+    alert("Notifications blocked");
+    return;
+  }
+  alert("Notifications enabled ✅ (free mode)");
 };
 
-onMessage(messaging, payload => {
-  alert(payload.notification.title + "\n" + payload.notification.body);
-});
+function notify(title, body) {
+  if (Notification.permission === "granted") {
+    new Notification(title, { body });
+  }
+
+  // sound ping
+  const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+  audio.play().catch(()=>{});
+}
 
 // ===== CHAT =====
 function renderChat() {
   sectionBody.innerHTML = `
     <div class="chatList" id="chatList"></div>
-    <textarea id="chatText" class="input"></textarea>
+    <textarea id="chatText" class="input" placeholder="Message..."></textarea>
     <button class="btn" onclick="sendChat()">Send</button>
   `;
 
   const list = document.getElementById("chatList");
 
-  onSnapshot(collection(db,"rooms","theboys","messages"), snap => {
-    list.innerHTML="";
-    snap.forEach(d=>{
-      const m=d.data();
-      list.innerHTML+=`
-        <div class="chatMsg">
-          <b>${m.createdByEmail}</b>: ${m.text}
-          ${isAdmin()?`<button onclick="deleteMsg('${d.id}')">🗑</button>`:""}
-        </div>`;
-    });
-  });
+  if (chatUnsub) chatUnsub();
+
+  chatUnsub = onSnapshot(
+    query(collection(db,"rooms","theboys","messages"), orderBy("createdAt")),
+    snap => {
+      list.innerHTML = "";
+      snap.forEach(d => {
+        const m = d.data();
+        list.innerHTML += `
+          <div class="chatMsg">
+            <b>${m.createdByEmail}</b>: ${m.text}
+            ${isAdmin()?`<button onclick="deleteMsg('${d.id}')">🗑</button>`:""}
+          </div>
+        `;
+
+        const ts = m.createdAt?.seconds || 0;
+        if (ts > lastMessageTime && m.createdBy !== auth.currentUser.uid) {
+          notify("New chat message", m.text || "New message");
+          lastMessageTime = ts;
+        }
+      });
+    }
+  );
 }
 
 window.sendChat = async () => {
+  const text = document.getElementById("chatText").value;
+  if (!text) return;
+
   await addDoc(collection(db,"rooms","theboys","messages"),{
-    text: chatText.value,
+    text,
     createdBy: auth.currentUser.uid,
     createdByEmail: currentUserProfile.email,
     createdAt: serverTimestamp()
   });
-  chatText.value="";
+
+  document.getElementById("chatText").value="";
 };
 
-window.deleteMsg = async id =>
+window.deleteMsg = async id => {
+  if (!isAdmin()) return;
   await deleteDoc(doc(db,"rooms","theboys","messages",id));
-
-// ===== ADMIN =====
-function renderAdmin() {
-  sectionBody.innerHTML="<h2>Admin</h2>";
-}
+};
 
 // ===== TABS =====
 window.showTab = tab => {
-  currentTab=tab;
-  tab==="chat"?renderChat():renderAdmin();
+  if (tab === "chat") renderChat();
 };
 
 // ===== AUTH STATE =====
 onAuthStateChanged(auth, async user => {
-  if(!user) return show("block","none","none");
+  if (!user) return show("block","none","none");
 
   const snap = await getDoc(doc(db,"users",user.uid));
-  if(!snap.exists()) return;
+  if (!snap.exists()) return;
 
-  currentUserProfile=snap.data();
+  currentUserProfile = snap.data();
 
-  if(currentUserProfile.status==="pending")
+  if (currentUserProfile.status === "pending")
     return show("none","block","none");
 
   show("none","none","block");
 
-  displayName.textContent=currentUserProfile.email;
-  rolePill.textContent=currentUserProfile.role.toUpperCase();
-  adminTab.style.display=isAdmin()?"inline-block":"none";
+  displayName.textContent = currentUserProfile.email;
+  rolePill.textContent = currentUserProfile.role.toUpperCase();
+  adminTab.style.display = isAdmin() ? "inline-block" : "none";
 
-  showTab("chat");
+  renderChat();
 });
