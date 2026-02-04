@@ -1,34 +1,15 @@
-// ===============================
-// THE HUB — app.js (FREE NOTIFY VERSION)
-// No Cloud Functions
-// 100% free
-// ===============================
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut
+  getAuth, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
 import {
-  getFirestore,
-  doc,
-  setDoc,
-  getDoc,
-  updateDoc,
-  collection,
-  addDoc,
-  onSnapshot,
-  deleteDoc,
-  serverTimestamp,
-  query,
-  orderBy
+  getFirestore, doc, setDoc, getDoc,
+  collection, addDoc, onSnapshot,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// ===== Firebase config =====
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyA9Mq0eCDuicDEejmtqCwlWnZ4otvz9FdY",
   authDomain: "the-hub-f09c4.firebaseapp.com",
@@ -41,146 +22,97 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// ===== DOM =====
+// DOM
 const authScreen = document.getElementById("authScreen");
 const pendingScreen = document.getElementById("pendingScreen");
 const appScreen = document.getElementById("appScreen");
-const sectionBody = document.getElementById("sectionBody");
-const adminTab = document.getElementById("adminTab");
+const chatList = document.getElementById("chatList");
+const chatInput = document.getElementById("chatInput");
 const displayName = document.getElementById("displayName");
 const rolePill = document.getElementById("rolePill");
+const authHint = document.getElementById("authHint");
 
-let currentUserProfile = null;
-let chatUnsub = null;
-let lastMessageTime = 0;
+let profile = null;
+let lastSeen = Date.now();
 
-// ===== Helpers =====
-const show = (a,b,c) => {
+// Helpers
+function show(a,b,c){
   authScreen.style.display=a;
   pendingScreen.style.display=b;
   appScreen.style.display=c;
-};
-const isAdmin = () => currentUserProfile?.role === "admin";
+}
 
-// ===== AUTH =====
+// Auth
 window.signup = async () => {
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
+  const email = emailInput.value;
+  const password = passwordInput.value;
   const cred = await createUserWithEmailAndPassword(auth,email,password);
   await setDoc(doc(db,"users",cred.user.uid),{
-    email,
-    role:"user",
-    status:"pending",
-    createdAt:Date.now()
+    email, role:"user", status:"pending"
   });
 };
 
 window.login = async () => {
-  await signInWithEmailAndPassword(
-    auth,
-    document.getElementById("email").value,
-    document.getElementById("password").value
-  );
+  await signInWithEmailAndPassword(auth,emailInput.value,passwordInput.value);
 };
 
 window.logout = async () => signOut(auth);
 
-// ===== FREE NOTIFICATIONS =====
+// FREE notifications
 window.enableNotifications = async () => {
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") {
-    alert("Notifications blocked");
-    return;
-  }
-  alert("Notifications enabled ✅ (free mode)");
+  const perm = await Notification.requestPermission();
+  if (perm === "granted") alert("Notifications enabled");
 };
 
-function notify(title, body) {
+function notify(text){
   if (Notification.permission === "granted") {
-    new Notification(title, { body });
+    new Notification("New message",{ body:text });
   }
-
-  // sound ping
-  const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-  audio.play().catch(()=>{});
+  navigator.vibrate?.(200);
+  new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play().catch(()=>{});
 }
 
-// ===== CHAT =====
-function renderChat() {
-  sectionBody.innerHTML = `
-    <div class="chatList" id="chatList"></div>
-    <textarea id="chatText" class="input" placeholder="Message..."></textarea>
-    <button class="btn" onclick="sendChat()">Send</button>
-  `;
-
-  const list = document.getElementById("chatList");
-
-  if (chatUnsub) chatUnsub();
-
-  chatUnsub = onSnapshot(
-    query(collection(db,"rooms","theboys","messages"), orderBy("createdAt")),
-    snap => {
-      list.innerHTML = "";
-      snap.forEach(d => {
-        const m = d.data();
-        list.innerHTML += `
-          <div class="chatMsg">
-            <b>${m.createdByEmail}</b>: ${m.text}
-            ${isAdmin()?`<button onclick="deleteMsg('${d.id}')">🗑</button>`:""}
-          </div>
-        `;
-
-        const ts = m.createdAt?.seconds || 0;
-        if (ts > lastMessageTime && m.createdBy !== auth.currentUser.uid) {
-          notify("New chat message", m.text || "New message");
-          lastMessageTime = ts;
-        }
-      });
-    }
-  );
+// Chat
+function listenChat(){
+  onSnapshot(collection(db,"rooms","theboys","messages"), snap => {
+    chatList.innerHTML="";
+    snap.forEach(d=>{
+      const m=d.data();
+      chatList.innerHTML+=`
+        <div class="chatMsg"><b>${m.email}</b>: ${m.text}</div>
+      `;
+      const t = m.createdAt?.seconds*1000 || 0;
+      if (t > lastSeen && m.email !== profile.email) {
+        notify(m.text);
+        lastSeen = t;
+      }
+    });
+  });
 }
 
-window.sendChat = async () => {
-  const text = document.getElementById("chatText").value;
+window.sendMessage = async () => {
+  const text = chatInput.value.trim();
   if (!text) return;
-
   await addDoc(collection(db,"rooms","theboys","messages"),{
     text,
-    createdBy: auth.currentUser.uid,
-    createdByEmail: currentUserProfile.email,
+    email: profile.email,
     createdAt: serverTimestamp()
   });
-
-  document.getElementById("chatText").value="";
+  chatInput.value="";
 };
 
-window.deleteMsg = async id => {
-  if (!isAdmin()) return;
-  await deleteDoc(doc(db,"rooms","theboys","messages",id));
-};
-
-// ===== TABS =====
-window.showTab = tab => {
-  if (tab === "chat") renderChat();
-};
-
-// ===== AUTH STATE =====
-onAuthStateChanged(auth, async user => {
-  if (!user) return show("block","none","none");
+// Auth state
+onAuthStateChanged(auth, async user=>{
+  if(!user) return show("flex","none","none");
 
   const snap = await getDoc(doc(db,"users",user.uid));
-  if (!snap.exists()) return;
+  profile = snap.data();
 
-  currentUserProfile = snap.data();
-
-  if (currentUserProfile.status === "pending")
-    return show("none","block","none");
+  if(profile.status==="pending")
+    return show("none","flex","none");
 
   show("none","none","block");
-
-  displayName.textContent = currentUserProfile.email;
-  rolePill.textContent = currentUserProfile.role.toUpperCase();
-  adminTab.style.display = isAdmin() ? "inline-block" : "none";
-
-  renderChat();
+  displayName.textContent = profile.email;
+  rolePill.textContent = profile.role.toUpperCase();
+  listenChat();
 });
