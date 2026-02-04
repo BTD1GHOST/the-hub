@@ -1,8 +1,0 @@
-{
-  "name": "The Hub",
-  "short_name": "Hub",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#070A14",
-  "theme_color": "#8B5CFF"
-}
