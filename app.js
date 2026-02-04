@@ -1,3 +1,4 @@
+// ===============================
 // THE HUB — app.js (v11 FULL COPY/PASTE)
 // Fixes:
 // - Non-admin posts are ALWAYS pending (approval required)
@@ -7,8 +8,29 @@
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, addDoc, serverTimestamp, orderBy, deleteDoc, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  addDoc,
+  serverTimestamp,
+  orderBy,
+  deleteDoc,
+  onSnapshot,
+  limit
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ===== Firebase config =====
 const firebaseConfig = {
@@ -51,7 +73,6 @@ async function uploadToCloudinary(file) {
 
   const res = await fetch(url, { method: "POST", body: form });
   const data = await res.json();
-
   if (!res.ok) throw new Error(data?.error?.message || "Upload failed");
   return { url: data.secure_url, type: file.type || "" };
 }
@@ -73,6 +94,7 @@ const subTitle = document.getElementById("subTitle");
 
 const sectionTitle = document.getElementById("sectionTitle");
 const sectionBody = document.getElementById("sectionBody");
+
 const newBtn = document.getElementById("newBtn");
 
 const sideCard = document.getElementById("sideCard");
@@ -168,9 +190,11 @@ function renderFilePreview(url, type) {
       </div>
     `;
   }
+
   if (isPDF) {
     return `<div style="margin-top:10px;"><a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open PDF</a></div>`;
   }
+
   return `<div style="margin-top:10px;"><a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open file</a></div>`;
 }
 
@@ -187,6 +211,7 @@ window.openPostView = function (postId) {
   if (!p) return;
 
   currentPostViewId = postId;
+
   if (postViewTitle) postViewTitle.textContent = p.title || "Post";
 
   const when = p.createdAt ? new Date(tsMs(p.createdAt)).toLocaleString() : "";
@@ -225,7 +250,6 @@ window.signup = async function () {
   const email = (emailInput?.value || "").trim();
   const password = passwordInput?.value || "";
   setHint("");
-
   if (!email || !password) return setHint("Enter email and password.");
 
   try {
@@ -248,7 +272,6 @@ window.login = async function () {
   const email = (emailInput?.value || "").trim();
   const password = passwordInput?.value || "";
   setHint("");
-
   if (!email || !password) return setHint("Enter email and password.");
 
   try {
@@ -280,6 +303,7 @@ window.showTab = function (tab) {
 // ===============================
 window.openComposer = function () {
   if (currentTab !== "school" && currentTab !== "media") return alert("New is only for School/Media.");
+
   composerTitleEl.textContent = currentTab === "school" ? "New School Post" : "New Media Post";
   postTitleInput.value = "";
   postTextInput.value = "";
@@ -358,55 +382,67 @@ function startRealtimePosts(section) {
     where("status", "==", "approved")
   );
 
-  unsubPosts = onSnapshot(q, (snap) => {
-    if (snap.empty) {
-      sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
-      return;
-    }
+  unsubPosts = onSnapshot(
+    q,
+    (snap) => {
+      if (snap.empty) {
+        sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
+        return;
+      }
 
-    const posts = [];
-    snap.forEach((d) => {
-      const p = { id: d.id, ...d.data() };
-      posts.push(p);
-      postCache[d.id] = p;
-    });
+      const posts = [];
+      snap.forEach((d) => {
+        const p = { id: d.id, ...d.data() };
+        posts.push(p);
+        postCache[d.id] = p;
+      });
 
-    posts.sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
+      posts.sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
 
-    let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
-    for (const p of posts) {
-      html += `
-        <div class="card postCard" data-postid="${escapeHTML(p.id)}" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-          ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
-          ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5; max-height: 4.2em; overflow:hidden;">${escapeHTML(p.text)}</div>` : ""}
-          ${p.fileURL ? `<div style="margin-top:8px; color:rgba(234,234,255,.55); font-size:12px;">Attachment included • click to view</div>` : ""}
-          <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-            ${escapeHTML(p.createdByEmail || "unknown")} • click to open
+      let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+      for (const p of posts) {
+        html += `
+          <div class="card postCard" data-postid="${escapeHTML(p.id)}" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+            ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
+            ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5; max-height: 4.2em; overflow:hidden;">${escapeHTML(p.text)}</div>` : ""}
+            ${p.fileURL ? `<div style="margin-top:8px; color:rgba(234,234,255,.55); font-size:12px;">Attachment included • click to view</div>` : ""}
+            <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
+              ${escapeHTML(p.createdByEmail || "unknown")} • click to open
+            </div>
           </div>
-        </div>
-      `;
+        `;
+      }
+      html += `</div>`;
+      sectionBody.innerHTML = html;
+    },
+    (err) => {
+      console.error(err);
+      sectionBody.innerHTML = `<div class="empty">Error loading posts. Check Console.</div>`;
     }
-    html += `</div>`;
-    sectionBody.innerHTML = html;
-  }, (err) => {
-    console.error(err);
-    sectionBody.innerHTML = `<div class="empty">Error loading posts. Check Console.</div>`;
-  });
+  );
 }
 
 function startRealtimePendingCount(sectionOrAll) {
   if (unsubPendingCount) unsubPendingCount();
 
-  const q = sectionOrAll === "all"
-    ? query(collection(db, "posts"), where("status", "==", "pending"))
-    : query(collection(db, "posts"), where("section", "==", sectionOrAll), where("status", "==", "pending"));
+  const q =
+    sectionOrAll === "all"
+      ? query(collection(db, "posts"), where("status", "==", "pending"))
+      : query(
+          collection(db, "posts"),
+          where("section", "==", sectionOrAll),
+          where("status", "==", "pending")
+        );
 
   unsubPendingCount = onSnapshot(q, (snap) => {
     if (!sideBody) return;
+
     if (sectionOrAll === "all") {
-      sideBody.textContent = isAdmin() ? `Realtime • Pending posts: ${snap.size}` : "Realtime";
+      sideBody.textContent = isAdmin() ? `Realtime • Pending posts: ${snap.size}` : `Realtime`;
     } else {
-      sideBody.textContent = isAdmin() ? `Realtime • Pending in ${sectionOrAll}: ${snap.size}` : "Realtime";
+      sideBody.textContent = isAdmin()
+        ? `Realtime • Pending in ${sectionOrAll}: ${snap.size}`
+        : `Realtime`;
     }
   });
 }
@@ -430,67 +466,83 @@ function startRealtimeAdminPanel() {
 
   const rerender = () => {
     const pendingPosts = [...latestPending].sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
-    const pendingHTML = pendingPosts.length === 0
-      ? `<div class="empty" style="padding:14px 10px;">No pending posts.</div>`
-      : `
-        <div style="display:flex; flex-direction:column; gap:12px;">
-          ${pendingPosts.map(p => `
-            <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-              <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-                <div style="flex:1; min-width:260px;">
-                  <div style="font-weight:900;">${escapeHTML((p.section || "post").toUpperCase())}</div>
-                  ${p.title ? `<div style="margin-top:6px; font-weight:800;">${escapeHTML(p.title)}</div>` : ""}
-                  ${p.text ? `<div style="margin-top:6px; color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
-                  ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
-                  <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-                    From ${escapeHTML(p.createdByEmail || "unknown")}
+
+    let pendingHTML =
+      pendingPosts.length === 0
+        ? `<div class="empty" style="padding:14px 10px;">No pending posts.</div>`
+        : `
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            ${pendingPosts
+              .map(
+                (p) => `
+                <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+                  <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:260px;">
+                      <div style="font-weight:900;">${escapeHTML((p.section || "post").toUpperCase())}</div>
+                      ${p.title ? `<div style="margin-top:6px; font-weight:800;">${escapeHTML(p.title)}</div>` : ""}
+                      ${p.text ? `<div style="margin-top:6px; color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
+                      ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
+                      <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">From ${escapeHTML(p.createdByEmail || "unknown")}</div>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                      <button class="btn" onclick="approvePost('${p.id}')">Approve</button>
+                      <button class="btn secondary" onclick="denyPost('${p.id}')">Deny</button>
+                    </div>
                   </div>
                 </div>
-                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                  <button class="btn" onclick="approvePost('${p.id}')">Approve</button>
-                  <button class="btn secondary" onclick="denyPost('${p.id}')">Deny</button>
-                </div>
-              </div>
-            </div>
-          `).join("")}
-        </div>
-      `;
+              `
+              )
+              .join("")}
+          </div>
+        `;
 
     const usersHTML = `
       <div style="display:flex; flex-direction:column; gap:12px;">
-        ${latestUsers.map(u => {
-          const email = u.email || "(no email)";
-          const role = u.role || "user";
-          const status = u.status || "pending";
-          const uid = u.id;
+        ${latestUsers
+          .map((u) => {
+            const email = u.email || "(no email)";
+            const role = u.role || "user";
+            const status = u.status || "pending";
+            const uid = u.id;
+            const statusColor =
+              status === "approved" ? "var(--good)" : status === "pending" ? "var(--warn)" : "var(--bad)";
+            const isOwner = role === "owner";
 
-          const statusColor = status === "approved" ? "var(--good)" : status === "pending" ? "var(--warn)" : "var(--bad)";
-          const isOwner = role === "owner";
-
-          return `
-            <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-              <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-                <div>
-                  <div style="font-weight:800;">${escapeHTML(email)}</div>
-                  <div style="color:rgba(234,234,255,.65); font-size:13px;">
-                    <span style="color:${statusColor}; font-weight:900;">${escapeHTML(status.toUpperCase())}</span> • Role: <b>${escapeHTML(role)}</b> • UID: <span style="opacity:.6;">${uid.slice(0, 6)}…</span>
+            return `
+              <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+                  <div>
+                    <div style="font-weight:800;">${escapeHTML(email)}</div>
+                    <div style="color:rgba(234,234,255,.65); font-size:13px;">
+                      <span style="color:${statusColor}; font-weight:900;">${escapeHTML(status.toUpperCase())}</span>
+                      • Role: <b>${escapeHTML(role)}</b>
+                      • UID: <span style="opacity:.6;">${uid.slice(0, 6)}…</span>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <select class="input" style="width:auto; padding:10px 12px;" onchange="changeRole('${uid}', this.value)" ${
+                      isOwner ? "disabled" : ""
+                    }>
+                      ${["user", "admin", "owner"]
+                        .map((r) => `<option value="${r}" ${r === role ? "selected" : ""}>${r}</option>`)
+                        .join("")}
+                    </select>
+                    ${
+                      status !== "approved"
+                        ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
+                        : `<button class="btn secondary" disabled>Approved</button>`
+                    }
+                    ${
+                      status !== "banned"
+                        ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
+                        : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`
+                    }
                   </div>
                 </div>
-                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                  <select class="input" style="width:auto; padding:10px 12px;" onchange="changeRole('${uid}', this.value)" ${isOwner ? "disabled" : ""}>
-                    ${["user", "admin", "owner"].map(r => `<option value="${r}" ${r === role ? "selected" : ""}>${r}</option>`).join("")}
-                  </select>
-                  ${status !== "approved"
-                    ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
-                    : `<button class="btn secondary" disabled>Approved</button>`}
-                  ${status !== "banned"
-                    ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
-                    : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`}
-                </div>
               </div>
-            </div>
-          `;
-        }).join("")}
+            `;
+          })
+          .join("")}
       </div>
     `;
 
@@ -508,45 +560,34 @@ function startRealtimeAdminPanel() {
     `;
   };
 
-  unsubAdminUsers = onSnapshot(
-    query(collection(db, "users"), orderBy("createdAt", "desc")),
-    (snap) => {
-      latestUsers = [];
-      snap.forEach((d) => latestUsers.push({ id: d.id, ...d.data() }));
-      rerender();
-    }
-  );
+  unsubAdminUsers = onSnapshot(query(collection(db, "users"), orderBy("createdAt", "desc")), (snap) => {
+    latestUsers = [];
+    snap.forEach((d) => latestUsers.push({ id: d.id, ...d.data() }));
+    rerender();
+  });
 
-  unsubAdminPendingPosts = onSnapshot(
-    query(collection(db, "posts"), where("status", "==", "pending")),
-    (snap) => {
-      latestPending = [];
-      snap.forEach((d) => latestPending.push({ id: d.id, ...d.data() }));
-      rerender();
-    }
-  );
+  unsubAdminPendingPosts = onSnapshot(query(collection(db, "posts"), where("status", "==", "pending")), (snap) => {
+    latestPending = [];
+    snap.forEach((d) => latestPending.push({ id: d.id, ...d.data() }));
+    rerender();
+  });
 }
 
 window.approvePost = async function (postId) {
   await updateDoc(doc(db, "posts", postId), { status: "approved" });
 };
-
 window.denyPost = async function (postId) {
   await deleteDoc(doc(db, "posts", postId));
 };
-
 window.approveUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "approved" });
 };
-
 window.banUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "banned" });
 };
-
 window.unbanUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "approved" });
 };
-
 window.changeRole = async function (uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
 };
@@ -588,43 +629,47 @@ function startRealtimeChat() {
   const msgsRef = collection(db, "rooms", CHAT_ROOM_ID, "messages");
   const q = query(msgsRef, orderBy("createdAt", "asc"), limit(200));
 
-  unsubChat = onSnapshot(q, (snap) => {
-    if (snap.empty) {
-      listEl.innerHTML = `<div class="empty">No messages yet.</div>`;
-      return;
-    }
+  unsubChat = onSnapshot(
+    q,
+    (snap) => {
+      if (snap.empty) {
+        listEl.innerHTML = `<div class="empty">No messages yet.</div>`;
+        return;
+      }
 
-    let html = "";
-    snap.forEach((d) => {
-      const m = d.data();
-      const id = d.id;
-      const when = m.createdAt ? new Date(tsMs(m.createdAt)).toLocaleString() : "";
-      const delBtn = isAdmin()
-        ? `<button class="btn danger" style="padding:8px 10px;" onclick="deleteChatMsg('${id}')">Delete</button>`
-        : "";
+      let html = "";
+      snap.forEach((d) => {
+        const m = d.data();
+        const id = d.id;
+        const when = m.createdAt ? new Date(tsMs(m.createdAt)).toLocaleString() : "";
+        const delBtn = isAdmin()
+          ? `<button class="btn danger" style="padding:8px 10px;" onclick="deleteChatMsg('${id}')">Delete</button>`
+          : "";
 
-      html += `
-        <div class="chatMsg">
-          <div style="flex:1;">
-            <div class="chatMeta">
-              <b>${escapeHTML(m.createdByEmail || "unknown")}</b> • ${escapeHTML(when)}
+        html += `
+          <div class="chatMsg">
+            <div style="flex:1;">
+              <div class="chatMeta">
+                <b>${escapeHTML(m.createdByEmail || "unknown")}</b> • ${escapeHTML(when)}
+              </div>
+              ${m.text ? `<div class="chatText">${escapeHTML(m.text)}</div>` : ""}
+              ${m.fileURL ? renderFilePreview(m.fileURL, m.fileType) : ""}
             </div>
-            ${m.text ? `<div class="chatText">${escapeHTML(m.text)}</div>` : ""}
-            ${m.fileURL ? renderFilePreview(m.fileURL, m.fileType) : ""}
+            <div style="display:flex; align-items:flex-start;">
+              ${delBtn}
+            </div>
           </div>
-          <div style="display:flex; align-items:flex-start;">
-            ${delBtn}
-          </div>
-        </div>
-      `;
-    });
+        `;
+      });
 
-    listEl.innerHTML = html;
-    listEl.scrollTop = listEl.scrollHeight;
-  }, (err) => {
-    console.error("chat error:", err);
-    listEl.innerHTML = `<div class="empty">Chat error. Check Console.</div>`;
-  });
+      listEl.innerHTML = html;
+      listEl.scrollTop = listEl.scrollHeight;
+    },
+    (err) => {
+      console.error("chat error:", err);
+      listEl.innerHTML = `<div class="empty">Chat error. Check Console.</div>`;
+    }
+  );
 }
 
 window.clearChatFile = function () {
@@ -728,7 +773,6 @@ function renderTab() {
   if (currentTab === "info") {
     sectionTitle.textContent = "Info";
     if (newBtn) newBtn.style.display = "none";
-
     sectionBody.innerHTML = `
       <div class="empty">
         <div style="text-align:left; max-width:520px; margin: 0 auto;">
@@ -742,7 +786,6 @@ function renderTab() {
         </div>
       </div>
     `;
-
     if (sideCard) sideCard.style.display = "none";
   }
 }
