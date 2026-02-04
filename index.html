@@ -92,13 +92,13 @@
           <div class="cardTitle" id="sideTitle">Queue</div>
           <button class="btn secondary" onclick="refreshSide()">Refresh</button>
         </div>
-        <div id="sideBody" class="empty">Auto-refresh: every 5s</div>
+        <div id="sideBody" class="empty">Realtime</div>
       </div>
     </div>
 
   </div>
 
-  <!-- COMPOSER MODAL -->
+  <!-- COMPOSER MODAL (posts) -->
   <div class="modalOverlay" id="composerOverlay" style="display:none;">
     <div class="modal">
       <div class="modalHead">
@@ -110,13 +110,12 @@
         <input class="input" id="postTitle" placeholder="Title (optional)" />
         <textarea class="input textarea" id="postText" placeholder="Write something..."></textarea>
 
-        <!-- Upload -->
         <div class="uploadRow">
           <input class="file" type="file" id="postFile" accept="image/*,application/pdf" />
           <div class="fileHint" id="fileHint">Optional: attach image/PDF. (Non-admin uploads require approval)</div>
         </div>
 
-        <div class="mutedNote" id="postRuleNote">
+        <div class="mutedNote">
           Rule: Text-only = instant. File attached = pending unless admin/owner.
         </div>
       </div>
@@ -128,6 +127,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=7"></script>
+  <script type="module" src="app.js?v=9"></script>
 </body>
 </html>
