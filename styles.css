@@ -121,6 +121,12 @@ body{
   color: var(--text);
   box-shadow:none;
 }
+.btn.danger{
+  background: rgba(255,77,109,.14);
+  border: 1px solid rgba(255,77,109,.30);
+  color: var(--text);
+  box-shadow:none;
+}
 
 .empty{color:var(--muted);text-align:center;padding:28px 10px}
 
@@ -174,6 +180,9 @@ body{
   backdrop-filter: blur(14px);
   padding:14px;
 }
+.modalWide{
+  width:min(980px, 100%);
+}
 .modalHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 4px 10px}
 .modalTitle{font-size:18px;font-weight:900}
 .modalBody{display:flex;flex-direction:column;gap:10px;padding:6px 4px 10px}
@@ -184,16 +193,36 @@ body{
 }
 .authCard{max-width:520px;margin:0 auto}
 
-/* -------------------
-   CHAT UI
-------------------- */
+/* Clickable post cards */
+.postCard{
+  cursor:pointer;
+  transition: transform .12s ease, background .12s ease, border-color .12s ease;
+}
+.postCard:hover{
+  transform: translateY(-1px);
+  background: rgba(255,255,255,.07) !important;
+  border-color: rgba(139,92,255,.25) !important;
+}
+
+/* Full view */
+.postMeta{
+  color: rgba(234,234,255,.55);
+  font-size: 13px;
+}
+.postBigText{
+  color: rgba(234,234,255,.85);
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+/* Chat */
 .chatWrap{
   display:flex;
   flex-direction:column;
   gap:12px;
   height: 560px;
 }
-
 .chatList{
   flex:1;
   overflow:auto;
@@ -202,7 +231,6 @@ body{
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.20);
 }
-
 .chatMsg{
   display:flex;
   gap:10px;
@@ -212,31 +240,26 @@ body{
   background: rgba(255,255,255,.04);
   margin-bottom: 10px;
 }
-
 .chatMeta{
   font-size:12px;
   color: rgba(234,234,255,.55);
   margin-bottom: 4px;
 }
-
 .chatText{
   color: rgba(234,234,255,.85);
   white-space: pre-wrap;
   line-height: 1.4;
 }
-
 .chatComposer{
   display:flex;
   gap:10px;
   align-items:flex-end;
   flex-wrap:wrap;
 }
-
 .chatInput{
   flex: 1;
   min-width: 220px;
 }
-
 .chatSmall{
   font-size:12px;
   color: rgba(234,234,255,.55);
