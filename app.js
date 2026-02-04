@@ -50,8 +50,8 @@ console.log("Firebase connected");
 // ===============================
 // Cloudinary (YOU MUST FILL THESE IN)
 // ===============================
-const CLOUD_NAME = "";     // <-- put your cloud name here
-const UPLOAD_PRESET = "";  // <-- put your unsigned preset here (hub_upload)
+const CLOUD_NAME = "dlsh8f5qh";     // <-- put your cloud name here
+const UPLOAD_PRESET = "hub_upload";  // <-- put your unsigned preset here (hub_upload)
 
 async function uploadToCloudinary(file) {
   if (!CLOUD_NAME || !UPLOAD_PRESET) {
