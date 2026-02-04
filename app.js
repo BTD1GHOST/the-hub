@@ -1,9 +1,7 @@
 // ===============================
-// THE HUB — app.js (FULL COPY/PASTE VERSION)
-// Firebase Auth + Firestore
-// Admin Panel (users)
-// Posts (School + Media) - text-only (no uploads yet)
-// NOTE: Posts loading uses NO orderBy to avoid Firestore index pain.
+// THE HUB — app.js (FULL COPY/PASTE)
+// Auth + Users Admin + Posts UI + Auto refresh
+// No Firestore composite index required for posts loading.
 // ===============================
 
 // ===== Firebase imports =====
@@ -28,7 +26,7 @@ import {
   where,
   addDoc,
   serverTimestamp,
-  orderBy // used only for users list (usually fine)
+  orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ===== Firebase config =====
@@ -49,35 +47,10 @@ const db = getFirestore(app);
 console.log("Firebase connected");
 
 // ===============================
-// Cloudinary (OPTIONAL — later)
+// Cloudinary (later)
 // ===============================
-const CLOUD_NAME = ""; // later
-const UPLOAD_PRESET = ""; // later
-
-async function uploadToCloudinary(file) {
-  if (!CLOUD_NAME || !UPLOAD_PRESET) throw new Error("Cloudinary not configured.");
-
-  const allowed = [
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-    "application/pdf"
-  ];
-  if (!allowed.includes(file.type)) throw new Error("Only images or PDFs allowed.");
-
-  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`;
-  const form = new FormData();
-  form.append("file", file);
-  form.append("upload_preset", UPLOAD_PRESET);
-  form.append("folder", "thehub");
-
-  const res = await fetch(url, { method: "POST", body: form });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || "Upload failed");
-
-  return { secure_url: data.secure_url, public_id: data.public_id };
-}
+const CLOUD_NAME = "";
+const UPLOAD_PRESET = "";
 
 // ===============================
 // DOM refs
@@ -102,11 +75,20 @@ const sideCard = document.getElementById("sideCard");
 const sideTitle = document.getElementById("sideTitle");
 const sideBody = document.getElementById("sideBody");
 
+// Composer modal
+const composerOverlay = document.getElementById("composerOverlay");
+const composerTitleEl = document.getElementById("composerTitle");
+const postTitleInput = document.getElementById("postTitle");
+const postTextInput = document.getElementById("postText");
+
 // ===============================
 // State
 // ===============================
 let currentTab = "school";
 let currentUserProfile = null;
+
+let refreshTimer = null;
+let composerOpen = false;
 
 // ===============================
 // Helpers
@@ -130,11 +112,8 @@ function escapeHTML(str) {
 }
 
 function tsToMs(ts) {
-  // Firestore Timestamp object => ms
-  // Works even if missing
   if (!ts) return 0;
   if (typeof ts.toMillis === "function") return ts.toMillis();
-  // sometimes comes as {seconds, nanoseconds}
   if (typeof ts.seconds === "number") return ts.seconds * 1000;
   return 0;
 }
@@ -146,6 +125,7 @@ window.signup = async function () {
   const email = (emailInput?.value || "").trim();
   const password = passwordInput?.value || "";
   setHint("");
+
   if (!email || !password) return setHint("Enter email and password.");
 
   try {
@@ -168,6 +148,7 @@ window.login = async function () {
   const email = (emailInput?.value || "").trim();
   const password = passwordInput?.value || "";
   setHint("");
+
   if (!email || !password) return setHint("Enter email and password.");
 
   try {
@@ -187,28 +168,59 @@ window.logout = async function () {
 // ===============================
 window.showTab = function (tab) {
   currentTab = tab;
+
   document.querySelectorAll(".tab").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === tab);
   });
+
   renderTab();
+  startAutoRefresh(); // restart interval on tab change
 };
 
 // ===============================
-// POSTS (text-only)
+// Composer modal (real UI)
 // ===============================
-async function createPost(section) {
-  if (!auth.currentUser || !currentUserProfile) return alert("Not logged in.");
+window.openComposer = function () {
+  if (currentTab !== "school" && currentTab !== "media") {
+    alert("New is only for School/Media right now.");
+    return;
+  }
 
-  const title = prompt("Post title (optional):") || "";
-  const text = prompt("Post text:") || "";
+  composerOpen = true;
 
-  if (!title.trim() && !text.trim()) return alert("No content. Cancelled.");
+  composerTitleEl.textContent = currentTab === "school" ? "New School Post" : "New Media Post";
+  postTitleInput.value = "";
+  postTextInput.value = "";
+
+  composerOverlay.style.display = "grid";
+  postTitleInput.focus();
+};
+
+window.closeComposer = function () {
+  composerOpen = false;
+  composerOverlay.style.display = "none";
+};
+
+window.submitPost = async function () {
+  if (!auth.currentUser || !currentUserProfile) {
+    alert("Not logged in.");
+    return;
+  }
+
+  const section = currentTab; // "school" or "media"
+  const title = (postTitleInput.value || "").trim();
+  const text = (postTextInput.value || "").trim();
+
+  if (!title && !text) {
+    alert("Write something first.");
+    return;
+  }
 
   // Text-only = approved (your rule)
   await addDoc(collection(db, "posts"), {
     section,
-    title: title.trim(),
-    text: text.trim(),
+    title,
+    text,
     fileURL: "",
     fileType: "",
     status: "approved",
@@ -217,15 +229,17 @@ async function createPost(section) {
     createdAt: serverTimestamp()
   });
 
-  alert("Posted!");
-  await loadPosts(section);
-}
+  window.closeComposer();
+  await loadPosts(section); // immediate refresh after posting
+};
 
+// ===============================
+// POSTS (load without composite index)
+// ===============================
 async function loadPosts(section) {
   try {
     sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
 
-    // NO orderBy here — avoids Firestore composite index requirements
     const q = query(
       collection(db, "posts"),
       where("section", "==", section),
@@ -239,7 +253,6 @@ async function loadPosts(section) {
       return;
     }
 
-    // Pull docs into array and sort by createdAt in JS
     const posts = [];
     snap.forEach((d) => posts.push({ id: d.id, ...d.data() }));
     posts.sort((a, b) => tsToMs(b.createdAt) - tsToMs(a.createdAt));
@@ -249,7 +262,7 @@ async function loadPosts(section) {
     for (const p of posts) {
       html += `
         <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-          ${p.title ? `<div style="font-weight:800; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
+          ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
           ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
           <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
             Posted by ${escapeHTML(p.createdByEmail || "unknown")}
@@ -273,7 +286,6 @@ async function renderAdminUsers() {
   try {
     sectionBody.innerHTML = `<div class="empty">Loading users...</div>`;
 
-    // If orderBy causes index error (rare), remove orderBy and it still works.
     const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
     const snap = await getDocs(q);
 
@@ -303,9 +315,9 @@ async function renderAdminUsers() {
         <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
           <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
             <div>
-              <div style="font-weight:700;">${escapeHTML(email)}</div>
+              <div style="font-weight:800;">${escapeHTML(email)}</div>
               <div style="color:rgba(234,234,255,.65); font-size:13px;">
-                <span style="color:${statusColor}; font-weight:700;">${escapeHTML(status.toUpperCase())}</span>
+                <span style="color:${statusColor}; font-weight:900;">${escapeHTML(status.toUpperCase())}</span>
                 • Role: <b>${escapeHTML(role)}</b>
                 • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
               </div>
@@ -347,17 +359,14 @@ window.approveUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "approved" });
   renderAdminUsers();
 };
-
 window.banUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "banned" });
   renderAdminUsers();
 };
-
 window.unbanUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "approved" });
   renderAdminUsers();
 };
-
 window.changeRole = async function (uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
   renderAdminUsers();
@@ -375,7 +384,7 @@ function renderTab() {
     loadPosts("school");
 
     if (sideTitle) sideTitle.textContent = "Queue";
-    if (sideBody) sideBody.textContent = "Nothing pending.";
+    if (sideBody) sideBody.textContent = "Auto-refresh: every 5s";
     if (sideCard) sideCard.style.display = "block";
   }
 
@@ -385,7 +394,7 @@ function renderTab() {
     loadPosts("media");
 
     if (sideTitle) sideTitle.textContent = "Queue";
-    if (sideBody) sideBody.textContent = "Nothing pending.";
+    if (sideBody) sideBody.textContent = "Auto-refresh: every 5s";
     if (sideCard) sideCard.style.display = "block";
   }
 
@@ -395,7 +404,7 @@ function renderTab() {
     sectionBody.innerHTML = `<div class="empty">Chat UI comes next.</div>`;
 
     if (sideTitle) sideTitle.textContent = "Chat Queue";
-    if (sideBody) sideBody.textContent = "Nothing pending.";
+    if (sideBody) sideBody.textContent = "Soon";
     if (sideCard) sideCard.style.display = "block";
   }
 
@@ -404,8 +413,8 @@ function renderTab() {
     if (newBtn) newBtn.style.display = "none";
     renderAdminUsers();
 
-    if (sideTitle) sideTitle.textContent = "Approvals";
-    if (sideBody) sideBody.textContent = "Nothing pending.";
+    if (sideTitle) sideTitle.textContent = "Admin";
+    if (sideBody) sideBody.textContent = "Auto-refresh: every 5s";
     if (sideCard) sideCard.style.display = "block";
   }
 
@@ -415,7 +424,7 @@ function renderTab() {
     sectionBody.innerHTML = `
       <div class="empty">
         <div style="text-align:left; max-width:520px; margin: 0 auto;">
-          <div style="font-weight:700; margin-bottom:8px;">Account Status Rules</div>
+          <div style="font-weight:900; margin-bottom:8px;">Account Status Rules</div>
           <div style="color:rgba(234,234,255,.70); line-height:1.6">
             • New signup = <b>pending</b><br/>
             • Approved user = <b>approved</b><br/>
@@ -430,15 +439,35 @@ function renderTab() {
 }
 
 // ===============================
-// Buttons
+// Auto refresh (every 5 seconds)
 // ===============================
-window.openComposer = function () {
-  if (currentTab === "school") return createPost("school");
-  if (currentTab === "media") return createPost("media");
-  alert("New is only for School/Media right now.");
-};
+function stopAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = null;
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+
+  // only refresh if you're on a tab that needs it
+  const shouldRefresh = (currentTab === "school" || currentTab === "media" || currentTab === "admin");
+  if (!shouldRefresh) return;
+
+  refreshTimer = setInterval(() => {
+    // don’t refresh while you’re typing a post
+    if (composerOpen) return;
+
+    if (currentTab === "school") loadPosts("school");
+    if (currentTab === "media") loadPosts("media");
+    if (currentTab === "admin") renderAdminUsers();
+  }, 5000);
+}
 
 window.refreshSide = function () {
+  // manual refresh button
+  if (currentTab === "school") return loadPosts("school");
+  if (currentTab === "media") return loadPosts("media");
+  if (currentTab === "admin") return renderAdminUsers();
   if (sideBody) sideBody.textContent = "Nothing pending.";
 };
 
@@ -448,6 +477,7 @@ window.refreshSide = function () {
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     currentUserProfile = null;
+    stopAutoRefresh();
     showOnly("auth");
     return;
   }
@@ -463,6 +493,7 @@ onAuthStateChanged(auth, async (user) => {
       status: "pending",
       createdAt: Date.now()
     });
+    stopAutoRefresh();
     showOnly("pending");
     return;
   }
@@ -471,6 +502,7 @@ onAuthStateChanged(auth, async (user) => {
   currentUserProfile = data;
 
   if (data.status === "banned") {
+    stopAutoRefresh();
     showOnly("auth");
     setHint("This account is banned.");
     await signOut(auth);
@@ -478,6 +510,7 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   if (data.status === "pending") {
+    stopAutoRefresh();
     showOnly("pending");
     return;
   }
@@ -500,4 +533,5 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   renderTab();
+  startAutoRefresh();
 });
