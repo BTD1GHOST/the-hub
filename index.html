@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="theme-color" content="#050817" />
+    <title>The Hub</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- AUTH -->
+    <div class="container" id="authScreen">
+      <div class="card authCard">
+        <div class="brandRow">
+          <div class="logo"></div>
+          <div class="brandText">The Hub</div>
+        </div>
+
+        <h1 class="h1">Login</h1>
+        <p class="sub">Sign in or create an account.</p>
+
+        <div class="row">
+          <input class="input" id="email" placeholder="Email" />
+          <input class="input" id="password" type="password" placeholder="Password" />
+        </div>
+
+        <div class="row">
+          <button class="btn" onclick="signup()">Sign Up</button>
+          <button class="btn secondary" onclick="login()">Login</button>
+        </div>
+
+        <div class="hint" id="authHint"></div>
+      </div>
+    </div>
+
+    <!-- PENDING -->
+    <div class="container" id="pendingScreen" style="display:none;">
+      <div class="card">
+        <div class="cardHead">
+          <div class="cardTitle">Pending Approval</div>
+          <button class="btn secondary" onclick="logout()">Logout</button>
+        </div>
+        <div class="empty">
+          Your account is pending approval.<br/>
+          An admin has to approve you before you can use the site.
+        </div>
+      </div>
+    </div>
+
+    <!-- APP -->
+    <div class="container" id="appScreen" style="display:none;">
+      <div class="topbar">
+        <div class="brand">
+          <div class="logo"></div>
+          <div>The Hub</div>
+        </div>
+
+        <div class="actions">
+          <span class="pill" id="rolePill">User</span>
+          <button class="iconbtn" title="Logout" onclick="logout()">↗</button>
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="h1">Welcome back, <span class="accent" id="displayName">User</span></div>
+        <p class="sub" id="subTitle">Dashboard</p>
+      </div>
+
+      <div class="tabbar" id="tabbar">
+        <button class="tab active" data-tab="school" onclick="showTab('school')">📚 <span>School</span></button>
+        <button class="tab" data-tab="media" onclick="showTab('media')">🖼️ <span>Media</span></button>
+        <button class="tab" data-tab="chat" onclick="showTab('chat')">💬 <span>The Boys</span></button>
+        <button class="tab" data-tab="admin" onclick="showTab('admin')" style="display:none;">🛡️ <span>Admin</span></button>
+        <button class="tab" data-tab="info" onclick="showTab('info')">ℹ️ <span>Info</span></button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="cardHead">
+            <div class="cardTitle" id="sectionTitle">School Work</div>
+            <button class="btn" id="newBtn" onclick="openComposer()">＋ New</button>
+          </div>
+
+          <div id="sectionBody">
+            <div class="empty">No content yet.</div>
+          </div>
+        </div>
+
+        <div class="card" id="sideCard">
+          <div class="cardHead">
+            <div class="cardTitle" id="sideTitle">Queue</div>
+            <button class="btn secondary" onclick="refreshSide()">Refresh</button>
+          </div>
+
+          <div id="sideBody" class="empty">Realtime</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPOSER MODAL (posts) -->
+    <div class="modalOverlay" id="composerOverlay" style="display:none;">
+      <div class="modal">
+        <div class="modalHead">
+          <div class="modalTitle" id="composerTitle">New Post</div>
+          <button class="iconbtn" title="Close" onclick="closeComposer()">✕</button>
+        </div>
+
+        <div class="modalBody">
+          <input class="input" id="postTitle" placeholder="Title (optional)" />
+          <textarea class="input textarea" id="postText" placeholder="Write something..."></textarea>
+
+          <div class="uploadRow">
+            <input class="file" type="file" id="postFile" accept="image/*,application/pdf" />
+            <div class="fileHint" id="fileHint">Optional: attach image/PDF.</div>
+          </div>
+
+          <div class="mutedNote">
+            Rule: Non-admin posts = <b>Pending approval</b>. Admin posts = instant.
+          </div>
+        </div>
+
+        <div class="modalActions">
+          <button class="btn secondary" onclick="closeComposer()">Cancel</button>
+          <button class="btn" onclick="submitPost()">Post</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST FULL VIEW MODAL -->
+    <div class="modalOverlay" id="postViewOverlay" style="display:none;">
+      <div class="modal modalWide">
+        <div class="modalHead">
+          <div class="modalTitle" id="postViewTitle">Post</div>
+          <button class="iconbtn" title="Close" onclick="closePostView()">✕</button>
+        </div>
+
+        <div class="modalBody">
+          <div class="postMeta" id="postViewMeta"></div>
+          <div class="postBigText" id="postViewText"></div>
+          <div id="postViewFile"></div>
+        </div>
+
+        <div class="modalActions">
+          <button class="btn danger" id="postDeleteBtn" style="display:none;" onclick="deleteCurrentPost()">Delete Post</button>
+          <button class="btn secondary" onclick="closePostView()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js?v=11"></script>
+  </body>
+</html>
