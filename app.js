@@ -1,10 +1,9 @@
 // ===============================
-// THE HUB — app.js (v7 FULL COPY/PASTE)
-// Auth + Users Admin + Posts (text + uploads) + Approvals + Auto-refresh
-// Posts loading avoids composite indexes by sorting client-side.
+// THE HUB — app.js (v8 FULL COPY/PASTE)
+// Realtime posts + realtime admin pending queue
+// Auth + Users Admin + Posts (text + uploads) + Approvals
 // ===============================
 
-// ===== Firebase imports =====
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
   getAuth,
@@ -21,13 +20,13 @@ import {
   getDoc,
   updateDoc,
   collection,
-  getDocs,
   query,
   where,
   addDoc,
   serverTimestamp,
   orderBy,
-  deleteDoc
+  deleteDoc,
+  onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ===== Firebase config =====
@@ -40,7 +39,6 @@ const firebaseConfig = {
   appId: "1:992597104461:web:17ea5b0e3ab5d518804904"
 };
 
-// ===== Initialize Firebase =====
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -48,16 +46,12 @@ const db = getFirestore(app);
 console.log("Firebase connected");
 
 // ===============================
-// Cloudinary (YOU MUST FILL THESE IN)
+// Cloudinary (filled)
 // ===============================
-const CLOUD_NAME = "dlsh8f5qh";     // <-- put your cloud name here
-const UPLOAD_PRESET = "hub_upload";  // <-- put your unsigned preset here (hub_upload)
+const CLOUD_NAME = "dlsh8f5qh";
+const UPLOAD_PRESET = "hub_upload";
 
 async function uploadToCloudinary(file) {
-  if (!CLOUD_NAME || !UPLOAD_PRESET) {
-    throw new Error("Cloudinary not configured. Fill CLOUD_NAME + UPLOAD_PRESET in app.js");
-  }
-
   const allowed = [
     "image/jpeg",
     "image/png",
@@ -65,14 +59,10 @@ async function uploadToCloudinary(file) {
     "image/gif",
     "application/pdf"
   ];
-  if (!allowed.includes(file.type)) {
-    throw new Error("Only images (jpg/png/webp/gif) or PDFs allowed.");
-  }
+  if (!allowed.includes(file.type)) throw new Error("Only images or PDFs allowed.");
 
   const maxMB = 10;
-  if (file.size > maxMB * 1024 * 1024) {
-    throw new Error(`File too large. Max ${maxMB}MB.`);
-  }
+  if (file.size > maxMB * 1024 * 1024) throw new Error(`File too large. Max ${maxMB}MB.`);
 
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`;
   const form = new FormData();
@@ -84,11 +74,7 @@ async function uploadToCloudinary(file) {
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message || "Upload failed");
 
-  return {
-    url: data.secure_url,
-    resourceType: data.resource_type,
-    format: data.format
-  };
+  return { url: data.secure_url };
 }
 
 // ===============================
@@ -127,9 +113,13 @@ const fileHint = document.getElementById("fileHint");
 // ===============================
 let currentTab = "school";
 let currentUserProfile = null;
-
-let refreshTimer = null;
 let composerOpen = false;
+
+// Realtime unsubscribers
+let unsubPosts = null;
+let unsubPendingCount = null;
+let unsubAdminUsers = null;
+let unsubAdminPendingPosts = null;
 
 // ===============================
 // Helpers
@@ -139,24 +129,61 @@ function showOnly(which) {
   if (pendingScreen) pendingScreen.style.display = which === "pending" ? "flex" : "none";
   if (appScreen) appScreen.style.display = which === "app" ? "block" : "none";
 }
+
 function setHint(msg) {
   if (!authHint) return;
   authHint.textContent = msg || "";
 }
+
 function escapeHTML(str) {
   return String(str || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
-function tsToMs(ts) {
-  if (!ts) return 0;
-  if (typeof ts.toMillis === "function") return ts.toMillis();
-  if (typeof ts.seconds === "number") return ts.seconds * 1000;
-  return 0;
-}
+
 function isAdmin() {
   return currentUserProfile?.role === "admin" || currentUserProfile?.role === "owner";
+}
+
+function cleanupRealtime() {
+  if (unsubPosts) unsubPosts();
+  if (unsubPendingCount) unsubPendingCount();
+  if (unsubAdminUsers) unsubAdminUsers();
+  if (unsubAdminPendingPosts) unsubAdminPendingPosts();
+  unsubPosts = null;
+  unsubPendingCount = null;
+  unsubAdminUsers = null;
+  unsubAdminPendingPosts = null;
+}
+
+function renderFilePreview(url, type) {
+  const safeUrl = escapeHTML(url);
+  const isImage = (type || "").startsWith("image/");
+  const isPDF = type === "application/pdf" || safeUrl.toLowerCase().endsWith(".pdf");
+
+  if (isImage) {
+    return `
+      <div style="margin-top:10px;">
+        <img src="${safeUrl}" alt="upload"
+          style="width:100%; max-height:420px; object-fit:cover; border-radius:14px; border:1px solid rgba(255,255,255,.10);" />
+      </div>
+    `;
+  }
+
+  if (isPDF) {
+    return `
+      <div style="margin-top:10px;">
+        <a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open PDF</a>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="margin-top:10px;">
+      <a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open file</a>
+    </div>
+  `;
 }
 
 // ===============================
@@ -199,6 +226,7 @@ window.login = async function () {
 };
 
 window.logout = async function () {
+  cleanupRealtime();
   await signOut(auth);
 };
 
@@ -211,18 +239,13 @@ window.showTab = function (tab) {
     b.classList.toggle("active", b.dataset.tab === tab);
   });
   renderTab();
-  startAutoRefresh();
 };
 
 // ===============================
-// Composer modal
+// Composer
 // ===============================
 window.openComposer = function () {
-  if (currentTab !== "school" && currentTab !== "media") {
-    alert("New is only for School/Media right now.");
-    return;
-  }
-
+  if (currentTab !== "school" && currentTab !== "media") return alert("New is only for School/Media.");
   composerOpen = true;
 
   composerTitleEl.textContent = currentTab === "school" ? "New School Post" : "New Media Post";
@@ -242,40 +265,27 @@ window.closeComposer = function () {
 
 postFileInput?.addEventListener("change", () => {
   const f = postFileInput.files?.[0];
-  if (!f) {
-    fileHint.textContent = "Optional: attach image/PDF. (Non-admin uploads require approval)";
-    return;
-  }
-  fileHint.textContent = `Selected: ${f.name}`;
+  fileHint.textContent = f ? `Selected: ${f.name}` : "Optional: attach image/PDF. (Non-admin uploads require approval)";
 });
 
 window.submitPost = async function () {
   if (!auth.currentUser || !currentUserProfile) return alert("Not logged in.");
 
-  const section = currentTab; // "school" or "media"
+  const section = currentTab;
   const title = (postTitleInput.value || "").trim();
   const text = (postTextInput.value || "").trim();
   const file = postFileInput.files?.[0] || null;
 
-  if (!title && !text && !file) {
-    alert("Write something or attach a file.");
-    return;
-  }
+  if (!title && !text && !file) return alert("Write something or attach a file.");
 
-  // STATUS RULES:
-  // - text-only => approved
-  // - file attached => pending unless admin/owner
   let status = "approved";
   if (file && !isAdmin()) status = "pending";
-  if (file && isAdmin()) status = "approved";
 
   let fileURL = "";
   let fileType = "";
 
   try {
-    // If file exists, upload it to Cloudinary first
     if (file) {
-      // Show quick feedback
       fileHint.textContent = "Uploading...";
       const up = await uploadToCloudinary(file);
       fileURL = up.url;
@@ -296,11 +306,6 @@ window.submitPost = async function () {
     });
 
     window.closeComposer();
-
-    // Immediate refresh: if pending and you're not admin, you won't see it (correct)
-    await loadPosts(section);
-    await updateSideCounts();
-    if (currentTab === "admin" && isAdmin()) await renderAdminPanel();
   } catch (err) {
     console.error(err);
     alert(err?.message || "Failed to post.");
@@ -308,267 +313,257 @@ window.submitPost = async function () {
 };
 
 // ===============================
-// POSTS: approved list (no composite index)
+// Realtime: School/Media posts
 // ===============================
-async function loadPosts(section) {
-  try {
-    sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
+function startRealtimePosts(section) {
+  if (unsubPosts) unsubPosts();
 
-    const q = query(
-      collection(db, "posts"),
-      where("section", "==", section),
-      where("status", "==", "approved")
-    );
+  sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
 
-    const snap = await getDocs(q);
+  const q = query(
+    collection(db, "posts"),
+    where("section", "==", section),
+    where("status", "==", "approved")
+  );
 
-    if (snap.empty) {
-      sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
-      return;
-    }
+  unsubPosts = onSnapshot(
+    q,
+    (snap) => {
+      if (snap.empty) {
+        sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
+        return;
+      }
 
-    const posts = [];
-    snap.forEach((d) => posts.push({ id: d.id, ...d.data() }));
-    posts.sort((a, b) => tsToMs(b.createdAt) - tsToMs(a.createdAt));
+      const posts = [];
+      snap.forEach((d) => posts.push({ id: d.id, ...d.data() }));
 
-    let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+      // Sort newest first (client-side)
+      posts.sort((a, b) => {
+        const ams = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds || 0) * 1000;
+        const bms = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds || 0) * 1000;
+        return bms - ams;
+      });
 
-    for (const p of posts) {
-      const hasFile = !!p.fileURL;
+      let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
 
-      html += `
-        <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-          ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
-          ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
-
-          ${
-            hasFile
-              ? renderFilePreview(p.fileURL, p.fileType)
-              : ""
-          }
-
-          <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-            Posted by ${escapeHTML(p.createdByEmail || "unknown")}
-          </div>
-        </div>
-      `;
-    }
-
-    html += `</div>`;
-    sectionBody.innerHTML = html;
-  } catch (err) {
-    console.error("loadPosts error:", err);
-    sectionBody.innerHTML = `<div class="empty">Error loading posts. Check Console.</div>`;
-  }
-}
-
-function renderFilePreview(url, type) {
-  const safeUrl = escapeHTML(url);
-  const isImage = (type || "").startsWith("image/");
-  const isPDF = type === "application/pdf" || safeUrl.toLowerCase().endsWith(".pdf");
-
-  if (isImage) {
-    return `
-      <div style="margin-top:10px;">
-        <img src="${safeUrl}" alt="upload" style="width:100%; max-height:420px; object-fit:cover; border-radius:14px; border:1px solid rgba(255,255,255,.10);" />
-      </div>
-    `;
-  }
-
-  if (isPDF) {
-    return `
-      <div style="margin-top:10px;">
-        <a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open PDF</a>
-      </div>
-    `;
-  }
-
-  return `
-    <div style="margin-top:10px;">
-      <a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open file</a>
-    </div>
-  `;
-}
-
-// ===============================
-// ADMIN: Users + Pending Posts
-// ===============================
-async function renderAdminPanel() {
-  sectionBody.innerHTML = `<div class="empty">Loading admin panel...</div>`;
-
-  // Build users list
-  const usersQ = query(collection(db, "users"), orderBy("createdAt", "desc"));
-  const usersSnap = await getDocs(usersQ);
-
-  // Pending posts
-  const pendingQ = query(collection(db, "posts"), where("status", "==", "pending"));
-  const pendingSnap = await getDocs(pendingQ);
-
-  // Users HTML
-  let usersHTML = `<div style="display:flex; flex-direction:column; gap:12px;">`;
-  usersSnap.forEach((d) => {
-    const u = d.data();
-    const uid = d.id;
-
-    const email = u.email || "(no email)";
-    const role = u.role || "user";
-    const status = u.status || "pending";
-
-    const statusColor =
-      status === "approved" ? "var(--good)" :
-      status === "pending" ? "var(--warn)" :
-      "var(--bad)";
-
-    const isOwner = role === "owner";
-
-    usersHTML += `
-      <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-          <div>
-            <div style="font-weight:800;">${escapeHTML(email)}</div>
-            <div style="color:rgba(234,234,255,.65); font-size:13px;">
-              <span style="color:${statusColor}; font-weight:900;">${escapeHTML(status.toUpperCase())}</span>
-              • Role: <b>${escapeHTML(role)}</b>
-              • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
+      for (const p of posts) {
+        html += `
+          <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+            ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
+            ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
+            ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
+            <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
+              Posted by ${escapeHTML(p.createdByEmail || "unknown")}
             </div>
           </div>
+        `;
+      }
 
-          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            <select class="input" style="width:auto; padding:10px 12px;"
-              onchange="changeRole('${uid}', this.value)"
-              ${isOwner ? "disabled" : ""}>
-              ${["user","admin","owner"].map(r => `<option value="${r}" ${r===role?"selected":""}>${r}</option>`).join("")}
-            </select>
+      html += `</div>`;
+      sectionBody.innerHTML = html;
+    },
+    (err) => {
+      console.error("posts realtime error:", err);
+      sectionBody.innerHTML = `<div class="empty">Error loading posts. Check Console.</div>`;
+    }
+  );
+}
 
-            ${
-              status !== "approved"
-                ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
-                : `<button class="btn secondary" disabled>Approved</button>`
-            }
+// Realtime: pending count (side card)
+function startRealtimePendingCount(sectionOrAll) {
+  if (unsubPendingCount) unsubPendingCount();
 
-            ${
-              status !== "banned"
-                ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
-                : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`
-            }
-          </div>
-        </div>
-      </div>
-    `;
+  const q =
+    sectionOrAll === "all"
+      ? query(collection(db, "posts"), where("status", "==", "pending"))
+      : query(collection(db, "posts"), where("section", "==", sectionOrAll), where("status", "==", "pending"));
+
+  unsubPendingCount = onSnapshot(q, (snap) => {
+    if (!sideBody) return;
+    if (sectionOrAll === "all") {
+      sideBody.textContent = isAdmin()
+        ? `Realtime • Pending posts: ${snap.size}`
+        : `Realtime`;
+    } else {
+      sideBody.textContent = isAdmin()
+        ? `Realtime • Pending in ${sectionOrAll}: ${snap.size}`
+        : `Realtime`;
+    }
   });
-  usersHTML += `</div>`;
+}
 
-  // Pending Posts HTML
-  const pendingPosts = [];
-  pendingSnap.forEach((d) => pendingPosts.push({ id: d.id, ...d.data() }));
-  pendingPosts.sort((a, b) => tsToMs(b.createdAt) - tsToMs(a.createdAt));
+// ===============================
+// Admin realtime panel (users + pending posts)
+// ===============================
+function startRealtimeAdminPanel() {
+  if (!isAdmin()) {
+    sectionBody.innerHTML = `<div class="empty">You are not an admin.</div>`;
+    return;
+  }
 
-  let pendingHTML = "";
-  if (pendingPosts.length === 0) {
-    pendingHTML = `<div class="empty" style="padding:14px 10px;">No pending posts.</div>`;
-  } else {
-    let list = `<div style="display:flex; flex-direction:column; gap:12px;">`;
-    for (const p of pendingPosts) {
-      list += `
+  // Users
+  if (unsubAdminUsers) unsubAdminUsers();
+  // Pending posts
+  if (unsubAdminPendingPosts) unsubAdminPendingPosts();
+
+  sectionBody.innerHTML = `<div class="empty">Loading admin panel...</div>`;
+
+  let latestUsers = [];
+  let latestPending = [];
+
+  const rerender = () => {
+    // Pending posts UI
+    const pendingPosts = [...latestPending];
+    pendingPosts.sort((a, b) => {
+      const ams = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds || 0) * 1000;
+      const bms = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds || 0) * 1000;
+      return bms - ams;
+    });
+
+    let pendingHTML = "";
+    if (pendingPosts.length === 0) {
+      pendingHTML = `<div class="empty" style="padding:14px 10px;">No pending posts.</div>`;
+    } else {
+      let list = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+      for (const p of pendingPosts) {
+        list += `
+          <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+              <div>
+                <div style="font-weight:900;">${escapeHTML((p.section || "post").toUpperCase())}</div>
+                ${p.title ? `<div style="margin-top:6px; font-weight:800;">${escapeHTML(p.title)}</div>` : ""}
+                ${p.text ? `<div style="margin-top:6px; color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
+                ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
+                <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
+                  From ${escapeHTML(p.createdByEmail || "unknown")}
+                </div>
+              </div>
+
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <button class="btn" onclick="approvePost('${p.id}')">Approve</button>
+                <button class="btn secondary" onclick="denyPost('${p.id}')">Deny</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      list += `</div>`;
+      pendingHTML = list;
+    }
+
+    // Users UI
+    let usersHTML = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+    for (const u of latestUsers) {
+      const email = u.email || "(no email)";
+      const role = u.role || "user";
+      const status = u.status || "pending";
+      const uid = u.id;
+
+      const statusColor =
+        status === "approved" ? "var(--good)" :
+        status === "pending" ? "var(--warn)" :
+        "var(--bad)";
+
+      const isOwner = role === "owner";
+
+      usersHTML += `
         <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
           <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
             <div>
-              <div style="font-weight:900;">${escapeHTML(p.section || "post").toUpperCase()}</div>
-              ${p.title ? `<div style="margin-top:6px; font-weight:800;">${escapeHTML(p.title)}</div>` : ""}
-              ${p.text ? `<div style="margin-top:6px; color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
-              ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
-              <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-                From ${escapeHTML(p.createdByEmail || "unknown")}
+              <div style="font-weight:800;">${escapeHTML(email)}</div>
+              <div style="color:rgba(234,234,255,.65); font-size:13px;">
+                <span style="color:${statusColor}; font-weight:900;">${escapeHTML(status.toUpperCase())}</span>
+                • Role: <b>${escapeHTML(role)}</b>
+                • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
               </div>
             </div>
 
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-              <button class="btn" onclick="approvePost('${p.id}')">Approve</button>
-              <button class="btn secondary" onclick="denyPost('${p.id}')">Deny</button>
+              <select class="input" style="width:auto; padding:10px 12px;"
+                onchange="changeRole('${uid}', this.value)"
+                ${isOwner ? "disabled" : ""}>
+                ${["user","admin","owner"].map(r => `<option value="${r}" ${r===role?"selected":""}>${r}</option>`).join("")}
+              </select>
+
+              ${
+                status !== "approved"
+                  ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
+                  : `<button class="btn secondary" disabled>Approved</button>`
+              }
+
+              ${
+                status !== "banned"
+                  ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
+                  : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`
+              }
             </div>
           </div>
         </div>
       `;
     }
-    list += `</div>`;
-    pendingHTML = list;
-  }
+    usersHTML += `</div>`;
 
-  // Final admin panel
-  sectionBody.innerHTML = `
-    <div style="display:flex; flex-direction:column; gap:18px;">
-      <div>
-        <div style="font-weight:900; font-size:18px; margin-bottom:10px;">Pending Posts</div>
-        ${pendingHTML}
+    sectionBody.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:18px;">
+        <div>
+          <div style="font-weight:900; font-size:18px; margin-bottom:10px;">Pending Posts</div>
+          ${pendingHTML}
+        </div>
+        <div>
+          <div style="font-weight:900; font-size:18px; margin:18px 0 10px;">Users</div>
+          ${usersHTML}
+        </div>
       </div>
+    `;
+  };
 
-      <div>
-        <div style="font-weight:900; font-size:18px; margin:18px 0 10px;">Users</div>
-        ${usersHTML}
-      </div>
-    </div>
-  `;
+  unsubAdminUsers = onSnapshot(
+    query(collection(db, "users"), orderBy("createdAt", "desc")),
+    (snap) => {
+      latestUsers = [];
+      snap.forEach((d) => latestUsers.push({ id: d.id, ...d.data() }));
+      rerender();
+    },
+    (err) => {
+      console.error("admin users realtime error:", err);
+      sectionBody.innerHTML = `<div class="empty">Admin error (users). Check Console.</div>`;
+    }
+  );
+
+  unsubAdminPendingPosts = onSnapshot(
+    query(collection(db, "posts"), where("status", "==", "pending")),
+    (snap) => {
+      latestPending = [];
+      snap.forEach((d) => latestPending.push({ id: d.id, ...d.data() }));
+      rerender();
+    },
+    (err) => {
+      console.error("admin pending realtime error:", err);
+      sectionBody.innerHTML = `<div class="empty">Admin error (pending). Check Console.</div>`;
+    }
+  );
 }
 
+// Admin actions
 window.approvePost = async function (postId) {
   await updateDoc(doc(db, "posts", postId), { status: "approved" });
-  await renderAdminPanel();
-  await updateSideCounts();
 };
 window.denyPost = async function (postId) {
-  // Deny = delete post record. (Cloudinary file remains unless you add signed deletes later.)
   await deleteDoc(doc(db, "posts", postId));
-  await renderAdminPanel();
-  await updateSideCounts();
 };
 
 window.approveUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "approved" });
-  await renderAdminPanel();
 };
 window.banUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "banned" });
-  await renderAdminPanel();
 };
 window.unbanUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "approved" });
-  await renderAdminPanel();
 };
 window.changeRole = async function (uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
-  await renderAdminPanel();
 };
-
-// ===============================
-// Side counts (pending posts per section)
-// ===============================
-async function updateSideCounts() {
-  try {
-    if (!sideBody) return;
-
-    // For school/media tabs, show pending count for that section (admin can see pending)
-    if (currentTab === "school" || currentTab === "media") {
-      const sec = currentTab;
-      const q1 = query(collection(db, "posts"), where("section", "==", sec), where("status", "==", "pending"));
-      const s1 = await getDocs(q1);
-      sideBody.textContent = isAdmin()
-        ? `Auto-refresh: every 5s • Pending in ${sec}: ${s1.size}`
-        : `Auto-refresh: every 5s`;
-      return;
-    }
-
-    if (currentTab === "admin") {
-      const qAll = query(collection(db, "posts"), where("status", "==", "pending"));
-      const sAll = await getDocs(qAll);
-      sideBody.textContent = `Auto-refresh: every 5s • Pending posts: ${sAll.size}`;
-      return;
-    }
-
-    sideBody.textContent = "Auto-refresh: every 5s";
-  } catch (e) {
-    console.error("updateSideCounts", e);
-  }
-}
 
 // ===============================
 // Render tab content
@@ -576,46 +571,46 @@ async function updateSideCounts() {
 function renderTab() {
   if (!sectionTitle || !sectionBody) return;
 
+  // Stop old realtime listeners and start new ones for the current tab
+  cleanupRealtime();
+
   if (currentTab === "school") {
     sectionTitle.textContent = "School Work";
     if (newBtn) newBtn.style.display = "inline-block";
-    loadPosts("school");
-    if (sideTitle) sideTitle.textContent = "Queue";
     if (sideCard) sideCard.style.display = "block";
-    updateSideCounts();
+    if (sideTitle) sideTitle.textContent = "Queue";
+
+    startRealtimePosts("school");
+    startRealtimePendingCount("school");
   }
 
   if (currentTab === "media") {
     sectionTitle.textContent = "Media";
     if (newBtn) newBtn.style.display = "inline-block";
-    loadPosts("media");
-    if (sideTitle) sideTitle.textContent = "Queue";
     if (sideCard) sideCard.style.display = "block";
-    updateSideCounts();
+    if (sideTitle) sideTitle.textContent = "Queue";
+
+    startRealtimePosts("media");
+    startRealtimePendingCount("media");
   }
 
   if (currentTab === "chat") {
     sectionTitle.textContent = "The Boys";
     if (newBtn) newBtn.style.display = "none";
-    sectionBody.innerHTML = `<div class="empty">Chat UI comes next.</div>`;
+    sectionBody.innerHTML = `<div class="empty">Chat comes next.</div>`;
+    if (sideCard) sideCard.style.display = "block";
     if (sideTitle) sideTitle.textContent = "Chat Queue";
     if (sideBody) sideBody.textContent = "Soon";
-    if (sideCard) sideCard.style.display = "block";
   }
 
   if (currentTab === "admin") {
     sectionTitle.textContent = "Admin Panel";
     if (newBtn) newBtn.style.display = "none";
-
-    if (!isAdmin()) {
-      sectionBody.innerHTML = `<div class="empty">You are not an admin.</div>`;
-    } else {
-      renderAdminPanel();
-    }
-
-    if (sideTitle) sideTitle.textContent = "Admin Queue";
     if (sideCard) sideCard.style.display = "block";
-    updateSideCounts();
+    if (sideTitle) sideTitle.textContent = "Admin Queue";
+
+    startRealtimePendingCount("all");
+    startRealtimeAdminPanel();
   }
 
   if (currentTab === "info") {
@@ -624,13 +619,14 @@ function renderTab() {
     sectionBody.innerHTML = `
       <div class="empty">
         <div style="text-align:left; max-width:520px; margin: 0 auto;">
-          <div style="font-weight:900; margin-bottom:8px;">Account Status Rules</div>
+          <div style="font-weight:900; margin-bottom:8px;">Rules</div>
           <div style="color:rgba(234,234,255,.70); line-height:1.6">
             • New signup = <b>pending</b><br/>
             • Approved user = <b>approved</b><br/>
             • Banned user = <b>banned</b><br/>
             • Text-only posts = <b>approved</b><br/>
-            • File uploads = <b>pending</b> unless admin/owner
+            • File uploads = <b>pending</b> unless admin/owner<br/>
+            • Realtime updates enabled ✅
           </div>
         </div>
       </div>
@@ -639,48 +635,19 @@ function renderTab() {
   }
 }
 
-// ===============================
-// Manual refresh button
-// ===============================
 window.refreshSide = function () {
-  if (composerOpen) return;
-
-  if (currentTab === "school") return loadPosts("school");
-  if (currentTab === "media") return loadPosts("media");
-  if (currentTab === "admin") return isAdmin() ? renderAdminPanel() : null;
-  updateSideCounts();
+  // with realtime, manual refresh isn’t needed, but keep it harmless
+  renderTab();
 };
-
-// ===============================
-// Auto refresh (every 5 seconds)
-// ===============================
-function stopAutoRefresh() {
-  if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = null;
-}
-function startAutoRefresh() {
-  stopAutoRefresh();
-
-  const shouldRefresh = (currentTab === "school" || currentTab === "media" || currentTab === "admin");
-  if (!shouldRefresh) return;
-
-  refreshTimer = setInterval(async () => {
-    if (composerOpen) return;
-
-    if (currentTab === "school") await loadPosts("school");
-    if (currentTab === "media") await loadPosts("media");
-    if (currentTab === "admin" && isAdmin()) await renderAdminPanel();
-    await updateSideCounts();
-  }, 5000);
-}
 
 // ===============================
 // Auth state
 // ===============================
 onAuthStateChanged(auth, async (user) => {
+  cleanupRealtime();
+
   if (!user) {
     currentUserProfile = null;
-    stopAutoRefresh();
     showOnly("auth");
     return;
   }
@@ -696,7 +663,6 @@ onAuthStateChanged(auth, async (user) => {
       status: "pending",
       createdAt: Date.now()
     });
-    stopAutoRefresh();
     showOnly("pending");
     return;
   }
@@ -705,7 +671,6 @@ onAuthStateChanged(auth, async (user) => {
   currentUserProfile = data;
 
   if (data.status === "banned") {
-    stopAutoRefresh();
     showOnly("auth");
     setHint("This account is banned.");
     await signOut(auth);
@@ -713,7 +678,6 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   if (data.status === "pending") {
-    stopAutoRefresh();
     showOnly("pending");
     return;
   }
@@ -722,17 +686,10 @@ onAuthStateChanged(auth, async (user) => {
 
   if (displayNameEl) displayNameEl.textContent = data.displayName || data.email || "User";
   if (rolePill) rolePill.textContent = (data.role || "user").toUpperCase();
-  if (subTitle) {
-    subTitle.textContent = isAdmin()
-      ? "Administrator Dashboard"
-      : "Dashboard";
-  }
+  if (subTitle) subTitle.textContent = isAdmin() ? "Administrator Dashboard" : "Dashboard";
 
   const adminTabBtn = document.querySelector('.tab[data-tab="admin"]');
-  if (adminTabBtn) {
-    adminTabBtn.style.display = isAdmin() ? "inline-flex" : "none";
-  }
+  if (adminTabBtn) adminTabBtn.style.display = isAdmin() ? "inline-flex" : "none";
 
   renderTab();
-  startAutoRefresh();
 });
