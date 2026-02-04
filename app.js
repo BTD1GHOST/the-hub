@@ -2,8 +2,8 @@
 // THE HUB — app.js (FULL COPY/PASTE VERSION)
 // Firebase Auth + Firestore
 // Admin Panel (users)
-// Posts (School + Media) - text-only for now
-// Cloudinary helper included (optional, later)
+// Posts (School + Media) - text-only (no uploads yet)
+// NOTE: Posts loading uses NO orderBy to avoid Firestore index pain.
 // ===============================
 
 // ===== Firebase imports =====
@@ -25,10 +25,10 @@ import {
   collection,
   getDocs,
   query,
-  orderBy,
+  where,
   addDoc,
   serverTimestamp,
-  where
+  orderBy // used only for users list (usually fine)
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ===== Firebase config =====
@@ -51,8 +51,8 @@ console.log("Firebase connected");
 // ===============================
 // Cloudinary (OPTIONAL — later)
 // ===============================
-const CLOUD_NAME = ""; // put your cloud name later
-const UPLOAD_PRESET = ""; // put your preset later (hub_upload)
+const CLOUD_NAME = ""; // later
+const UPLOAD_PRESET = ""; // later
 
 async function uploadToCloudinary(file) {
   if (!CLOUD_NAME || !UPLOAD_PRESET) throw new Error("Cloudinary not configured.");
@@ -64,9 +64,7 @@ async function uploadToCloudinary(file) {
     "image/gif",
     "application/pdf"
   ];
-  if (!allowed.includes(file.type)) {
-    throw new Error("Only images (jpg/png/webp/gif) or PDFs allowed.");
-  }
+  if (!allowed.includes(file.type)) throw new Error("Only images or PDFs allowed.");
 
   const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`;
   const form = new FormData();
@@ -111,7 +109,7 @@ let currentTab = "school";
 let currentUserProfile = null;
 
 // ===============================
-// UI helpers
+// Helpers
 // ===============================
 function showOnly(which) {
   if (authScreen) authScreen.style.display = which === "auth" ? "flex" : "none";
@@ -125,22 +123,33 @@ function setHint(msg) {
 }
 
 function escapeHTML(str) {
-  return String(str || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return String(str || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function tsToMs(ts) {
+  // Firestore Timestamp object => ms
+  // Works even if missing
+  if (!ts) return 0;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  // sometimes comes as {seconds, nanoseconds}
+  if (typeof ts.seconds === "number") return ts.seconds * 1000;
+  return 0;
 }
 
 // ===============================
-// AUTH: Sign Up / Login / Logout
+// AUTH
 // ===============================
 window.signup = async function () {
   const email = (emailInput?.value || "").trim();
   const password = passwordInput?.value || "";
   setHint("");
-
   if (!email || !password) return setHint("Enter email and password.");
 
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-
     await setDoc(doc(db, "users", cred.user.uid), {
       email,
       displayName: email.split("@")[0],
@@ -148,7 +157,6 @@ window.signup = async function () {
       status: "pending",
       createdAt: Date.now()
     });
-
     setHint("Account created. Waiting for approval.");
   } catch (err) {
     console.error(err);
@@ -160,7 +168,6 @@ window.login = async function () {
   const email = (emailInput?.value || "").trim();
   const password = passwordInput?.value || "";
   setHint("");
-
   if (!email || !password) return setHint("Enter email and password.");
 
   try {
@@ -180,42 +187,31 @@ window.logout = async function () {
 // ===============================
 window.showTab = function (tab) {
   currentTab = tab;
-
   document.querySelectorAll(".tab").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === tab);
   });
-
   renderTab();
 };
 
 // ===============================
-// POSTS (text-only for now)
+// POSTS (text-only)
 // ===============================
 async function createPost(section) {
-  if (!auth.currentUser || !currentUserProfile) {
-    alert("Not logged in.");
-    return;
-  }
+  if (!auth.currentUser || !currentUserProfile) return alert("Not logged in.");
 
   const title = prompt("Post title (optional):") || "";
   const text = prompt("Post text:") || "";
 
-  // If they cancel both prompts / no content, don't post.
-  if (!title.trim() && !text.trim()) {
-    alert("No content. Cancelled.");
-    return;
-  }
+  if (!title.trim() && !text.trim()) return alert("No content. Cancelled.");
 
-  // Text-only posts are approved instantly (your rule)
-  const status = "approved";
-
+  // Text-only = approved (your rule)
   await addDoc(collection(db, "posts"), {
-    section, // "school" or "media"
+    section,
     title: title.trim(),
     text: text.trim(),
     fileURL: "",
     fileType: "",
-    status,
+    status: "approved",
     createdBy: auth.currentUser.uid,
     createdByEmail: currentUserProfile.email || "",
     createdAt: serverTimestamp()
@@ -226,111 +222,125 @@ async function createPost(section) {
 }
 
 async function loadPosts(section) {
-  sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
+  try {
+    sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
 
-  // Approved posts only
-  const q = query(
-    collection(db, "posts"),
-    where("section", "==", section),
-    where("status", "==", "approved"),
-    orderBy("createdAt", "desc")
-  );
+    // NO orderBy here — avoids Firestore composite index requirements
+    const q = query(
+      collection(db, "posts"),
+      where("section", "==", section),
+      where("status", "==", "approved")
+    );
 
-  const snap = await getDocs(q);
+    const snap = await getDocs(q);
 
-  if (snap.empty) {
-    sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
-    return;
-  }
+    if (snap.empty) {
+      sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
+      return;
+    }
 
-  let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+    // Pull docs into array and sort by createdAt in JS
+    const posts = [];
+    snap.forEach((d) => posts.push({ id: d.id, ...d.data() }));
+    posts.sort((a, b) => tsToMs(b.createdAt) - tsToMs(a.createdAt));
 
-  snap.forEach((d) => {
-    const p = d.data();
-    html += `
-      <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-        ${p.title ? `<div style="font-weight:800; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
-        ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
-        <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-          Posted by ${escapeHTML(p.createdByEmail || "unknown")}
+    let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+
+    for (const p of posts) {
+      html += `
+        <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+          ${p.title ? `<div style="font-weight:800; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
+          ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
+          <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
+            Posted by ${escapeHTML(p.createdByEmail || "unknown")}
+          </div>
         </div>
-      </div>
-    `;
-  });
+      `;
+    }
 
-  html += `</div>`;
-  sectionBody.innerHTML = html;
+    html += `</div>`;
+    sectionBody.innerHTML = html;
+  } catch (err) {
+    console.error("loadPosts error:", err);
+    sectionBody.innerHTML = `<div class="empty">Error loading posts. Check Console.</div>`;
+  }
 }
 
 // ===============================
-// Admin: Users panel
+// ADMIN: Users panel
 // ===============================
 async function renderAdminUsers() {
-  sectionBody.innerHTML = `<div class="empty">Loading users...</div>`;
+  try {
+    sectionBody.innerHTML = `<div class="empty">Loading users...</div>`;
 
-  const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
+    // If orderBy causes index error (rare), remove orderBy and it still works.
+    const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
 
-  if (snap.empty) {
-    sectionBody.innerHTML = `<div class="empty">No users found.</div>`;
-    return;
-  }
+    if (snap.empty) {
+      sectionBody.innerHTML = `<div class="empty">No users found.</div>`;
+      return;
+    }
 
-  let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+    let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
 
-  snap.forEach((d) => {
-    const u = d.data();
-    const uid = d.id;
+    snap.forEach((d) => {
+      const u = d.data();
+      const uid = d.id;
 
-    const email = u.email || "(no email)";
-    const role = u.role || "user";
-    const status = u.status || "pending";
+      const email = u.email || "(no email)";
+      const role = u.role || "user";
+      const status = u.status || "pending";
 
-    const statusColor =
-      status === "approved" ? "var(--good)" :
-      status === "pending" ? "var(--warn)" :
-      "var(--bad)";
+      const statusColor =
+        status === "approved" ? "var(--good)" :
+        status === "pending" ? "var(--warn)" :
+        "var(--bad)";
 
-    const isOwner = role === "owner";
+      const isOwner = role === "owner";
 
-    html += `
-      <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-          <div>
-            <div style="font-weight:700;">${escapeHTML(email)}</div>
-            <div style="color:rgba(234,234,255,.65); font-size:13px;">
-              <span style="color:${statusColor}; font-weight:700;">${escapeHTML(status.toUpperCase())}</span>
-              • Role: <b>${escapeHTML(role)}</b>
-              • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
+      html += `
+        <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+          <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:700;">${escapeHTML(email)}</div>
+              <div style="color:rgba(234,234,255,.65); font-size:13px;">
+                <span style="color:${statusColor}; font-weight:700;">${escapeHTML(status.toUpperCase())}</span>
+                • Role: <b>${escapeHTML(role)}</b>
+                • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <select class="input" style="width:auto; padding:10px 12px;"
+                onchange="changeRole('${uid}', this.value)"
+                ${isOwner ? "disabled" : ""}>
+                ${["user","admin","owner"].map(r => `<option value="${r}" ${r===role?"selected":""}>${r}</option>`).join("")}
+              </select>
+
+              ${
+                status !== "approved"
+                  ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
+                  : `<button class="btn secondary" disabled>Approved</button>`
+              }
+
+              ${
+                status !== "banned"
+                  ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
+                  : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`
+              }
             </div>
           </div>
-
-          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            <select class="input" style="width:auto; padding:10px 12px;"
-              onchange="changeRole('${uid}', this.value)"
-              ${isOwner ? "disabled" : ""}>
-              ${["user","admin","owner"].map(r => `<option value="${r}" ${r===role?"selected":""}>${r}</option>`).join("")}
-            </select>
-
-            ${
-              status !== "approved"
-                ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
-                : `<button class="btn secondary" disabled>Approved</button>`
-            }
-
-            ${
-              status !== "banned"
-                ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
-                : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`
-            }
-          </div>
         </div>
-      </div>
-    `;
-  });
+      `;
+    });
 
-  html += `</div>`;
-  sectionBody.innerHTML = html;
+    html += `</div>`;
+    sectionBody.innerHTML = html;
+  } catch (err) {
+    console.error("renderAdminUsers error:", err);
+    sectionBody.innerHTML = `<div class="empty">Error loading users. Check Console.</div>`;
+  }
 }
 
 window.approveUser = async function (uid) {
@@ -433,7 +443,7 @@ window.refreshSide = function () {
 };
 
 // ===============================
-// Auth state: decide which screen to show
+// Auth state
 // ===============================
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
@@ -445,7 +455,6 @@ onAuthStateChanged(auth, async (user) => {
   const userRef = doc(db, "users", user.uid);
   const snap = await getDoc(userRef);
 
-  // If missing user doc, create pending
   if (!snap.exists()) {
     await setDoc(userRef, {
       email: user.email || "",
@@ -461,7 +470,6 @@ onAuthStateChanged(auth, async (user) => {
   const data = snap.data();
   currentUserProfile = data;
 
-  // banned
   if (data.status === "banned") {
     showOnly("auth");
     setHint("This account is banned.");
@@ -469,16 +477,13 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  // pending
   if (data.status === "pending") {
     showOnly("pending");
     return;
   }
 
-  // approved => app
   showOnly("app");
 
-  // header UI
   if (displayNameEl) displayNameEl.textContent = data.displayName || data.email || "User";
   if (rolePill) rolePill.textContent = (data.role || "user").toUpperCase();
   if (subTitle) {
@@ -488,7 +493,6 @@ onAuthStateChanged(auth, async (user) => {
         : "Dashboard";
   }
 
-  // show/hide admin tab
   const adminTabBtn = document.querySelector('.tab[data-tab="admin"]');
   if (adminTabBtn) {
     adminTabBtn.style.display =
