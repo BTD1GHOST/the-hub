@@ -1,7 +1,6 @@
 // ===============================
-// THE HUB — app.js (v8 FULL COPY/PASTE)
-// Realtime posts + realtime admin pending queue
-// Auth + Users Admin + Posts (text + uploads) + Approvals
+// THE HUB — app.js (v9 FULL COPY/PASTE)
+// Realtime School/Media posts + Admin approvals + Realtime Chat (The Boys)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -26,7 +25,8 @@ import {
   serverTimestamp,
   orderBy,
   deleteDoc,
-  onSnapshot
+  onSnapshot,
+  limit
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ===== Firebase config =====
@@ -42,8 +42,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-console.log("Firebase connected");
 
 // ===============================
 // Cloudinary (filled)
@@ -74,7 +72,7 @@ async function uploadToCloudinary(file) {
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message || "Upload failed");
 
-  return { url: data.secure_url };
+  return { url: data.secure_url, type: file.type || "" };
 }
 
 // ===============================
@@ -100,7 +98,7 @@ const sideCard = document.getElementById("sideCard");
 const sideTitle = document.getElementById("sideTitle");
 const sideBody = document.getElementById("sideBody");
 
-// Composer
+// Composer (posts)
 const composerOverlay = document.getElementById("composerOverlay");
 const composerTitleEl = document.getElementById("composerTitle");
 const postTitleInput = document.getElementById("postTitle");
@@ -120,6 +118,7 @@ let unsubPosts = null;
 let unsubPendingCount = null;
 let unsubAdminUsers = null;
 let unsubAdminPendingPosts = null;
+let unsubChat = null;
 
 // ===============================
 // Helpers
@@ -129,34 +128,33 @@ function showOnly(which) {
   if (pendingScreen) pendingScreen.style.display = which === "pending" ? "flex" : "none";
   if (appScreen) appScreen.style.display = which === "app" ? "block" : "none";
 }
-
 function setHint(msg) {
   if (!authHint) return;
   authHint.textContent = msg || "";
 }
-
 function escapeHTML(str) {
   return String(str || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
-
 function isAdmin() {
   return currentUserProfile?.role === "admin" || currentUserProfile?.role === "owner";
 }
-
 function cleanupRealtime() {
   if (unsubPosts) unsubPosts();
   if (unsubPendingCount) unsubPendingCount();
   if (unsubAdminUsers) unsubAdminUsers();
   if (unsubAdminPendingPosts) unsubAdminPendingPosts();
-  unsubPosts = null;
-  unsubPendingCount = null;
-  unsubAdminUsers = null;
-  unsubAdminPendingPosts = null;
+  if (unsubChat) unsubChat();
+  unsubPosts = unsubPendingCount = unsubAdminUsers = unsubAdminPendingPosts = unsubChat = null;
 }
-
+function tsMs(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (typeof ts.seconds === "number") return ts.seconds * 1000;
+  return 0;
+}
 function renderFilePreview(url, type) {
   const safeUrl = escapeHTML(url);
   const isImage = (type || "").startsWith("image/");
@@ -170,20 +168,10 @@ function renderFilePreview(url, type) {
       </div>
     `;
   }
-
   if (isPDF) {
-    return `
-      <div style="margin-top:10px;">
-        <a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open PDF</a>
-      </div>
-    `;
+    return `<div style="margin-top:10px;"><a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open PDF</a></div>`;
   }
-
-  return `
-    <div style="margin-top:10px;">
-      <a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open file</a>
-    </div>
-  `;
+  return `<div style="margin-top:10px;"><a class="btn secondary" href="${safeUrl}" target="_blank" rel="noopener">Open file</a></div>`;
 }
 
 // ===============================
@@ -242,7 +230,7 @@ window.showTab = function (tab) {
 };
 
 // ===============================
-// Composer
+// Post Composer (modal)
 // ===============================
 window.openComposer = function () {
   if (currentTab !== "school" && currentTab !== "media") return alert("New is only for School/Media.");
@@ -289,7 +277,7 @@ window.submitPost = async function () {
       fileHint.textContent = "Uploading...";
       const up = await uploadToCloudinary(file);
       fileURL = up.url;
-      fileType = file.type || "";
+      fileType = up.type;
       fileHint.textContent = "Uploaded ✔";
     }
 
@@ -313,11 +301,10 @@ window.submitPost = async function () {
 };
 
 // ===============================
-// Realtime: School/Media posts
+// Realtime Posts
 // ===============================
 function startRealtimePosts(section) {
   if (unsubPosts) unsubPosts();
-
   sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
 
   const q = query(
@@ -326,50 +313,36 @@ function startRealtimePosts(section) {
     where("status", "==", "approved")
   );
 
-  unsubPosts = onSnapshot(
-    q,
-    (snap) => {
-      if (snap.empty) {
-        sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
-        return;
-      }
-
-      const posts = [];
-      snap.forEach((d) => posts.push({ id: d.id, ...d.data() }));
-
-      // Sort newest first (client-side)
-      posts.sort((a, b) => {
-        const ams = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds || 0) * 1000;
-        const bms = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds || 0) * 1000;
-        return bms - ams;
-      });
-
-      let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
-
-      for (const p of posts) {
-        html += `
-          <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-            ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
-            ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
-            ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
-            <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-              Posted by ${escapeHTML(p.createdByEmail || "unknown")}
-            </div>
-          </div>
-        `;
-      }
-
-      html += `</div>`;
-      sectionBody.innerHTML = html;
-    },
-    (err) => {
-      console.error("posts realtime error:", err);
-      sectionBody.innerHTML = `<div class="empty">Error loading posts. Check Console.</div>`;
+  unsubPosts = onSnapshot(q, (snap) => {
+    if (snap.empty) {
+      sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
+      return;
     }
-  );
+    const posts = [];
+    snap.forEach((d) => posts.push({ id: d.id, ...d.data() }));
+    posts.sort((a,b) => tsMs(b.createdAt) - tsMs(a.createdAt));
+
+    let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+    for (const p of posts) {
+      html += `
+        <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+          ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
+          ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
+          ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
+          <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
+            Posted by ${escapeHTML(p.createdByEmail || "unknown")}
+          </div>
+        </div>
+      `;
+    }
+    html += `</div>`;
+    sectionBody.innerHTML = html;
+  }, (err) => {
+    console.error(err);
+    sectionBody.innerHTML = `<div class="empty">Error loading posts. Check Console.</div>`;
+  });
 }
 
-// Realtime: pending count (side card)
 function startRealtimePendingCount(sectionOrAll) {
   if (unsubPendingCount) unsubPendingCount();
 
@@ -381,9 +354,7 @@ function startRealtimePendingCount(sectionOrAll) {
   unsubPendingCount = onSnapshot(q, (snap) => {
     if (!sideBody) return;
     if (sectionOrAll === "all") {
-      sideBody.textContent = isAdmin()
-        ? `Realtime • Pending posts: ${snap.size}`
-        : `Realtime`;
+      sideBody.textContent = isAdmin() ? `Realtime • Pending posts: ${snap.size}` : `Realtime`;
     } else {
       sideBody.textContent = isAdmin()
         ? `Realtime • Pending in ${sectionOrAll}: ${snap.size}`
@@ -393,7 +364,7 @@ function startRealtimePendingCount(sectionOrAll) {
 }
 
 // ===============================
-// Admin realtime panel (users + pending posts)
+// Admin panel realtime (users + pending posts)
 // ===============================
 function startRealtimeAdminPanel() {
   if (!isAdmin()) {
@@ -401,9 +372,7 @@ function startRealtimeAdminPanel() {
     return;
   }
 
-  // Users
   if (unsubAdminUsers) unsubAdminUsers();
-  // Pending posts
   if (unsubAdminPendingPosts) unsubAdminPendingPosts();
 
   sectionBody.innerHTML = `<div class="empty">Loading admin panel...</div>`;
@@ -412,96 +381,74 @@ function startRealtimeAdminPanel() {
   let latestPending = [];
 
   const rerender = () => {
-    // Pending posts UI
-    const pendingPosts = [...latestPending];
-    pendingPosts.sort((a, b) => {
-      const ams = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds || 0) * 1000;
-      const bms = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds || 0) * 1000;
-      return bms - ams;
-    });
+    const pendingPosts = [...latestPending].sort((a,b) => tsMs(b.createdAt) - tsMs(a.createdAt));
 
-    let pendingHTML = "";
-    if (pendingPosts.length === 0) {
-      pendingHTML = `<div class="empty" style="padding:14px 10px;">No pending posts.</div>`;
-    } else {
-      let list = `<div style="display:flex; flex-direction:column; gap:12px;">`;
-      for (const p of pendingPosts) {
-        list += `
+    let pendingHTML = pendingPosts.length === 0
+      ? `<div class="empty" style="padding:14px 10px;">No pending posts.</div>`
+      : `<div style="display:flex; flex-direction:column; gap:12px;">
+          ${pendingPosts.map(p => `
+            <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+              <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+                <div>
+                  <div style="font-weight:900;">${escapeHTML((p.section || "post").toUpperCase())}</div>
+                  ${p.title ? `<div style="margin-top:6px; font-weight:800;">${escapeHTML(p.title)}</div>` : ""}
+                  ${p.text ? `<div style="margin-top:6px; color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
+                  ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
+                  <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
+                    From ${escapeHTML(p.createdByEmail || "unknown")}
+                  </div>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                  <button class="btn" onclick="approvePost('${p.id}')">Approve</button>
+                  <button class="btn secondary" onclick="denyPost('${p.id}')">Deny</button>
+                </div>
+              </div>
+            </div>
+          `).join("")}
+        </div>`;
+
+    const usersHTML = `<div style="display:flex; flex-direction:column; gap:12px;">
+      ${latestUsers.map(u => {
+        const email = u.email || "(no email)";
+        const role = u.role || "user";
+        const status = u.status || "pending";
+        const uid = u.id;
+        const statusColor =
+          status === "approved" ? "var(--good)" :
+          status === "pending" ? "var(--warn)" :
+          "var(--bad)";
+        const isOwner = role === "owner";
+        return `
           <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
             <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
               <div>
-                <div style="font-weight:900;">${escapeHTML((p.section || "post").toUpperCase())}</div>
-                ${p.title ? `<div style="margin-top:6px; font-weight:800;">${escapeHTML(p.title)}</div>` : ""}
-                ${p.text ? `<div style="margin-top:6px; color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
-                ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
-                <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-                  From ${escapeHTML(p.createdByEmail || "unknown")}
+                <div style="font-weight:800;">${escapeHTML(email)}</div>
+                <div style="color:rgba(234,234,255,.65); font-size:13px;">
+                  <span style="color:${statusColor}; font-weight:900;">${escapeHTML(status.toUpperCase())}</span>
+                  • Role: <b>${escapeHTML(role)}</b>
+                  • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
                 </div>
               </div>
-
               <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                <button class="btn" onclick="approvePost('${p.id}')">Approve</button>
-                <button class="btn secondary" onclick="denyPost('${p.id}')">Deny</button>
+                <select class="input" style="width:auto; padding:10px 12px;"
+                  onchange="changeRole('${uid}', this.value)"
+                  ${isOwner ? "disabled" : ""}>
+                  ${["user","admin","owner"].map(r => `<option value="${r}" ${r===role?"selected":""}>${r}</option>`).join("")}
+                </select>
+
+                ${status !== "approved"
+                  ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
+                  : `<button class="btn secondary" disabled>Approved</button>`}
+
+                ${status !== "banned"
+                  ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
+                  : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`}
               </div>
             </div>
           </div>
         `;
-      }
-      list += `</div>`;
-      pendingHTML = list;
-    }
-
-    // Users UI
-    let usersHTML = `<div style="display:flex; flex-direction:column; gap:12px;">`;
-    for (const u of latestUsers) {
-      const email = u.email || "(no email)";
-      const role = u.role || "user";
-      const status = u.status || "pending";
-      const uid = u.id;
-
-      const statusColor =
-        status === "approved" ? "var(--good)" :
-        status === "pending" ? "var(--warn)" :
-        "var(--bad)";
-
-      const isOwner = role === "owner";
-
-      usersHTML += `
-        <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
-          <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-            <div>
-              <div style="font-weight:800;">${escapeHTML(email)}</div>
-              <div style="color:rgba(234,234,255,.65); font-size:13px;">
-                <span style="color:${statusColor}; font-weight:900;">${escapeHTML(status.toUpperCase())}</span>
-                • Role: <b>${escapeHTML(role)}</b>
-                • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
-              </div>
-            </div>
-
-            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-              <select class="input" style="width:auto; padding:10px 12px;"
-                onchange="changeRole('${uid}', this.value)"
-                ${isOwner ? "disabled" : ""}>
-                ${["user","admin","owner"].map(r => `<option value="${r}" ${r===role?"selected":""}>${r}</option>`).join("")}
-              </select>
-
-              ${
-                status !== "approved"
-                  ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
-                  : `<button class="btn secondary" disabled>Approved</button>`
-              }
-
-              ${
-                status !== "banned"
-                  ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
-                  : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`
-              }
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    usersHTML += `</div>`;
+      }).join("")}
+    </div>`;
 
     sectionBody.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:18px;">
@@ -523,10 +470,6 @@ function startRealtimeAdminPanel() {
       latestUsers = [];
       snap.forEach((d) => latestUsers.push({ id: d.id, ...d.data() }));
       rerender();
-    },
-    (err) => {
-      console.error("admin users realtime error:", err);
-      sectionBody.innerHTML = `<div class="empty">Admin error (users). Check Console.</div>`;
     }
   );
 
@@ -536,15 +479,10 @@ function startRealtimeAdminPanel() {
       latestPending = [];
       snap.forEach((d) => latestPending.push({ id: d.id, ...d.data() }));
       rerender();
-    },
-    (err) => {
-      console.error("admin pending realtime error:", err);
-      sectionBody.innerHTML = `<div class="empty">Admin error (pending). Check Console.</div>`;
     }
   );
 }
 
-// Admin actions
 window.approvePost = async function (postId) {
   await updateDoc(doc(db, "posts", postId), { status: "approved" });
 };
@@ -566,12 +504,132 @@ window.changeRole = async function (uid, role) {
 };
 
 // ===============================
-// Render tab content
+// CHAT — The Boys (room: "theboys")
+// ===============================
+const CHAT_ROOM_ID = "theboys";
+
+function chatTemplate() {
+  return `
+    <div class="chatWrap">
+      <div class="chatList" id="chatList">
+        <div class="empty">Loading chat...</div>
+      </div>
+
+      <div class="chatComposer">
+        <div class="chatInput">
+          <textarea class="input textarea" id="chatText" placeholder="Message..." style="min-height:90px;"></textarea>
+          <div class="chatSmall" id="chatHint">Realtime chat • room: The Boys</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px; min-width:220px;">
+          <input class="file" type="file" id="chatFile" accept="image/*,application/pdf" />
+          <button class="btn" onclick="sendChat()">Send</button>
+          <button class="btn secondary" onclick="clearChatFile()">Clear file</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function startRealtimeChat() {
+  if (unsubChat) unsubChat();
+
+  const listEl = document.getElementById("chatList");
+  if (!listEl) return;
+
+  const msgsRef = collection(db, "rooms", CHAT_ROOM_ID, "messages");
+  const q = query(msgsRef, orderBy("createdAt", "asc"), limit(200));
+
+  unsubChat = onSnapshot(q, (snap) => {
+    if (snap.empty) {
+      listEl.innerHTML = `<div class="empty">No messages yet.</div>`;
+      return;
+    }
+
+    let html = "";
+    snap.forEach((d) => {
+      const m = d.data();
+      const when = m.createdAt ? new Date(tsMs(m.createdAt)).toLocaleString() : "";
+      html += `
+        <div class="chatMsg">
+          <div style="flex:1;">
+            <div class="chatMeta">
+              <b>${escapeHTML(m.createdByEmail || "unknown")}</b> • ${escapeHTML(when)}
+            </div>
+            ${m.text ? `<div class="chatText">${escapeHTML(m.text)}</div>` : ""}
+            ${m.fileURL ? renderFilePreview(m.fileURL, m.fileType) : ""}
+          </div>
+        </div>
+      `;
+    });
+
+    listEl.innerHTML = html;
+    listEl.scrollTop = listEl.scrollHeight;
+  }, (err) => {
+    console.error("chat error:", err);
+    listEl.innerHTML = `<div class="empty">Chat error. Check Console.</div>`;
+  });
+}
+
+window.clearChatFile = function () {
+  const f = document.getElementById("chatFile");
+  if (f) f.value = "";
+};
+
+window.sendChat = async function () {
+  const textEl = document.getElementById("chatText");
+  const fileEl = document.getElementById("chatFile");
+  const hintEl = document.getElementById("chatHint");
+
+  if (!textEl || !fileEl) return;
+
+  const text = (textEl.value || "").trim();
+  const file = fileEl.files?.[0] || null;
+
+  if (!text && !file) return alert("Type a message or add a file.");
+
+  let fileURL = "";
+  let fileType = "";
+
+  try {
+    if (file) {
+      if (hintEl) hintEl.textContent = "Uploading...";
+      const up = await uploadToCloudinary(file);
+      fileURL = up.url;
+      fileType = up.type;
+      if (hintEl) hintEl.textContent = "Uploaded ✔ sending...";
+    }
+
+    // Ensure room doc exists (admins can create it; but this is harmless if already exists)
+    // If rules block non-admin from creating room doc, that’s okay — messages can still be written if room exists.
+    // So we do NOT force-create room doc here.
+
+    const msgsRef = collection(db, "rooms", CHAT_ROOM_ID, "messages");
+    await addDoc(msgsRef, {
+      text,
+      fileURL,
+      fileType,
+      createdBy: auth.currentUser.uid,
+      createdByEmail: currentUserProfile.email || "",
+      createdAt: serverTimestamp()
+    });
+
+    textEl.value = "";
+    fileEl.value = "";
+    if (hintEl) hintEl.textContent = "Realtime chat • room: The Boys";
+  } catch (err) {
+    console.error(err);
+    alert(err?.message || "Failed to send.");
+    if (hintEl) hintEl.textContent = "Realtime chat • room: The Boys";
+  }
+};
+
+// ===============================
+// Render Tabs
 // ===============================
 function renderTab() {
   if (!sectionTitle || !sectionBody) return;
 
-  // Stop old realtime listeners and start new ones for the current tab
   cleanupRealtime();
 
   if (currentTab === "school") {
@@ -579,7 +637,6 @@ function renderTab() {
     if (newBtn) newBtn.style.display = "inline-block";
     if (sideCard) sideCard.style.display = "block";
     if (sideTitle) sideTitle.textContent = "Queue";
-
     startRealtimePosts("school");
     startRealtimePendingCount("school");
   }
@@ -589,7 +646,6 @@ function renderTab() {
     if (newBtn) newBtn.style.display = "inline-block";
     if (sideCard) sideCard.style.display = "block";
     if (sideTitle) sideTitle.textContent = "Queue";
-
     startRealtimePosts("media");
     startRealtimePendingCount("media");
   }
@@ -597,10 +653,11 @@ function renderTab() {
   if (currentTab === "chat") {
     sectionTitle.textContent = "The Boys";
     if (newBtn) newBtn.style.display = "none";
-    sectionBody.innerHTML = `<div class="empty">Chat comes next.</div>`;
     if (sideCard) sideCard.style.display = "block";
-    if (sideTitle) sideTitle.textContent = "Chat Queue";
-    if (sideBody) sideBody.textContent = "Soon";
+    if (sideTitle) sideTitle.textContent = "Chat";
+    if (sideBody) sideBody.textContent = "Realtime";
+    sectionBody.innerHTML = chatTemplate();
+    startRealtimeChat();
   }
 
   if (currentTab === "admin") {
@@ -608,7 +665,6 @@ function renderTab() {
     if (newBtn) newBtn.style.display = "none";
     if (sideCard) sideCard.style.display = "block";
     if (sideTitle) sideTitle.textContent = "Admin Queue";
-
     startRealtimePendingCount("all");
     startRealtimeAdminPanel();
   }
@@ -621,12 +677,9 @@ function renderTab() {
         <div style="text-align:left; max-width:520px; margin: 0 auto;">
           <div style="font-weight:900; margin-bottom:8px;">Rules</div>
           <div style="color:rgba(234,234,255,.70); line-height:1.6">
-            • New signup = <b>pending</b><br/>
-            • Approved user = <b>approved</b><br/>
-            • Banned user = <b>banned</b><br/>
             • Text-only posts = <b>approved</b><br/>
             • File uploads = <b>pending</b> unless admin/owner<br/>
-            • Realtime updates enabled ✅
+            • Chat is realtime ✅
           </div>
         </div>
       </div>
@@ -636,7 +689,6 @@ function renderTab() {
 }
 
 window.refreshSide = function () {
-  // with realtime, manual refresh isn’t needed, but keep it harmless
   renderTab();
 };
 
