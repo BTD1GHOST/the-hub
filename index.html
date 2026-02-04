@@ -8,7 +8,7 @@
 </head>
 <body>
 
-  <!-- AUTH SCREENS -->
+  <!-- AUTH -->
   <div class="container" id="authScreen">
     <div class="card authCard">
       <div class="brandRow">
@@ -112,11 +112,11 @@
 
         <div class="uploadRow">
           <input class="file" type="file" id="postFile" accept="image/*,application/pdf" />
-          <div class="fileHint" id="fileHint">Optional: attach image/PDF. (Non-admin uploads require approval)</div>
+          <div class="fileHint" id="fileHint">Optional: attach image/PDF.</div>
         </div>
 
         <div class="mutedNote">
-          Rule: Text-only = instant. File attached = pending unless admin/owner.
+          Rule: Non-admin posts = <b>Pending approval</b>. Admin posts = instant.
         </div>
       </div>
 
@@ -127,6 +127,26 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=9"></script>
+  <!-- POST FULL VIEW MODAL -->
+  <div class="modalOverlay" id="postViewOverlay" style="display:none;">
+    <div class="modal modalWide">
+      <div class="modalHead">
+        <div class="modalTitle" id="postViewTitle">Post</div>
+        <button class="iconbtn" title="Close" onclick="closePostView()">✕</button>
+      </div>
+
+      <div class="modalBody">
+        <div class="postMeta" id="postViewMeta"></div>
+        <div class="postBigText" id="postViewText"></div>
+        <div id="postViewFile"></div>
+      </div>
+
+      <div class="modalActions">
+        <button class="btn secondary" onclick="closePostView()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js?v=10"></script>
 </body>
 </html>
