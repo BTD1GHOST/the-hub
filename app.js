@@ -1,6 +1,8 @@
 // ===============================
-// THE HUB — app.js (clean rebuild)
+// THE HUB — app.js (FULL COPY/PASTE VERSION)
 // Firebase Auth + Firestore
+// Admin Panel (users)
+// Posts (School + Media) - text-only for now
 // Cloudinary helper included (optional, later)
 // ===============================
 
@@ -23,7 +25,10 @@ import {
   collection,
   getDocs,
   query,
-  orderBy
+  orderBy,
+  addDoc,
+  serverTimestamp,
+  where
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ===== Firebase config =====
@@ -46,8 +51,8 @@ console.log("Firebase connected");
 // ===============================
 // Cloudinary (OPTIONAL — later)
 // ===============================
-const CLOUD_NAME = "";      // put your cloud name later
-const UPLOAD_PRESET = "";   // put your preset later (hub_upload)
+const CLOUD_NAME = ""; // put your cloud name later
+const UPLOAD_PRESET = ""; // put your preset later (hub_upload)
 
 async function uploadToCloudinary(file) {
   if (!CLOUD_NAME || !UPLOAD_PRESET) throw new Error("Cloudinary not configured.");
@@ -119,6 +124,10 @@ function setHint(msg) {
   authHint.textContent = msg || "";
 }
 
+function escapeHTML(str) {
+  return String(str || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
 // ===============================
 // AUTH: Sign Up / Login / Logout
 // ===============================
@@ -180,6 +189,80 @@ window.showTab = function (tab) {
 };
 
 // ===============================
+// POSTS (text-only for now)
+// ===============================
+async function createPost(section) {
+  if (!auth.currentUser || !currentUserProfile) {
+    alert("Not logged in.");
+    return;
+  }
+
+  const title = prompt("Post title (optional):") || "";
+  const text = prompt("Post text:") || "";
+
+  // If they cancel both prompts / no content, don't post.
+  if (!title.trim() && !text.trim()) {
+    alert("No content. Cancelled.");
+    return;
+  }
+
+  // Text-only posts are approved instantly (your rule)
+  const status = "approved";
+
+  await addDoc(collection(db, "posts"), {
+    section, // "school" or "media"
+    title: title.trim(),
+    text: text.trim(),
+    fileURL: "",
+    fileType: "",
+    status,
+    createdBy: auth.currentUser.uid,
+    createdByEmail: currentUserProfile.email || "",
+    createdAt: serverTimestamp()
+  });
+
+  alert("Posted!");
+  await loadPosts(section);
+}
+
+async function loadPosts(section) {
+  sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
+
+  // Approved posts only
+  const q = query(
+    collection(db, "posts"),
+    where("section", "==", section),
+    where("status", "==", "approved"),
+    orderBy("createdAt", "desc")
+  );
+
+  const snap = await getDocs(q);
+
+  if (snap.empty) {
+    sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
+    return;
+  }
+
+  let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+
+  snap.forEach((d) => {
+    const p = d.data();
+    html += `
+      <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+        ${p.title ? `<div style="font-weight:800; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
+        ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
+        <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
+          Posted by ${escapeHTML(p.createdByEmail || "unknown")}
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  sectionBody.innerHTML = html;
+}
+
+// ===============================
 // Admin: Users panel
 // ===============================
 async function renderAdminUsers() {
@@ -214,10 +297,10 @@ async function renderAdminUsers() {
       <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
           <div>
-            <div style="font-weight:700;">${email}</div>
+            <div style="font-weight:700;">${escapeHTML(email)}</div>
             <div style="color:rgba(234,234,255,.65); font-size:13px;">
-              <span style="color:${statusColor}; font-weight:700;">${status.toUpperCase()}</span>
-              • Role: <b>${role}</b>
+              <span style="color:${statusColor}; font-weight:700;">${escapeHTML(status.toUpperCase())}</span>
+              • Role: <b>${escapeHTML(role)}</b>
               • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
             </div>
           </div>
@@ -279,7 +362,7 @@ function renderTab() {
   if (currentTab === "school") {
     sectionTitle.textContent = "School Work";
     if (newBtn) newBtn.style.display = "inline-block";
-    sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
+    loadPosts("school");
 
     if (sideTitle) sideTitle.textContent = "Queue";
     if (sideBody) sideBody.textContent = "Nothing pending.";
@@ -289,7 +372,7 @@ function renderTab() {
   if (currentTab === "media") {
     sectionTitle.textContent = "Media";
     if (newBtn) newBtn.style.display = "inline-block";
-    sectionBody.innerHTML = `<div class="empty">No media yet.</div>`;
+    loadPosts("media");
 
     if (sideTitle) sideTitle.textContent = "Queue";
     if (sideBody) sideBody.textContent = "Nothing pending.";
@@ -337,10 +420,12 @@ function renderTab() {
 }
 
 // ===============================
-// Misc buttons
+// Buttons
 // ===============================
 window.openComposer = function () {
-  alert("Composer comes next — after posts + approvals are wired.");
+  if (currentTab === "school") return createPost("school");
+  if (currentTab === "media") return createPost("media");
+  alert("New is only for School/Media right now.");
 };
 
 window.refreshSide = function () {
@@ -410,6 +495,5 @@ onAuthStateChanged(auth, async (user) => {
       data.role === "admin" || data.role === "owner" ? "inline-flex" : "none";
   }
 
-  // render current tab
   renderTab();
 });
