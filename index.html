@@ -4,23 +4,22 @@
   <meta charset="UTF-8">
   <title>The Hub</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<div id="authScreen" class="container">
-  <div class="card authCard">
+<div id="authScreen" class="center">
+  <div class="card">
     <h1>The Hub</h1>
     <input id="email" class="input" placeholder="Email">
-    <input id="password" class="input" type="password" placeholder="Password">
+    <input id="password" type="password" class="input" placeholder="Password">
     <button class="btn" onclick="login()">Login</button>
     <button class="btn secondary" onclick="signup()">Sign Up</button>
-    <div id="authHint" class="hint"></div>
+    <div id="authHint"></div>
   </div>
 </div>
 
-<div id="pendingScreen" class="container" style="display:none;">
+<div id="pendingScreen" class="center" style="display:none;">
   <div class="card">
     <h2>Pending Approval</h2>
     <p>Waiting for admin approval.</p>
@@ -28,33 +27,23 @@
   </div>
 </div>
 
-<div id="appScreen" class="container" style="display:none;">
+<div id="appScreen" style="display:none;">
   <div class="topbar">
     <div>
-      <b id="displayName">User</b>
-      <span class="pill" id="rolePill">USER</span>
+      <b id="displayName"></b>
+      <span id="rolePill" class="pill"></span>
     </div>
     <button class="btn secondary" onclick="enableNotifications()">🔔 Enable Notifications</button>
     <button class="btn secondary" onclick="logout()">Logout</button>
   </div>
 
-  <div class="tabbar">
-    <button class="tab active" onclick="showTab('chat')">💬 Chat</button>
-    <button class="tab" onclick="showTab('admin')" id="adminTab" style="display:none;">🛡 Admin</button>
+  <div class="chat">
+    <div id="chatList" class="chatList"></div>
+    <textarea id="chatInput" class="input" placeholder="Type a message..."></textarea>
+    <button class="btn" onclick="sendMessage()">Send</button>
   </div>
-
-  <div id="sectionBody"></div>
 </div>
 
-<!-- CHAT MODAL -->
-<div id="postViewOverlay" class="modalOverlay" style="display:none;"></div>
-
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/firebase-messaging-sw.js");
-}
-</script>
-
-<script type="module" src="app.js?v=20"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
