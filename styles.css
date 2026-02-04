@@ -1,8 +1,6 @@
-/* ====== THE HUB THEME ====== */
 :root{
   --bg0:#070A14;
   --bg1:#0B1030;
-  --card: rgba(255,255,255,.06);
   --stroke: rgba(255,255,255,.10);
   --text:#EAEAFF;
   --muted: rgba(234,234,255,.65);
@@ -143,11 +141,8 @@ body{
 
 /* Upload row */
 .uploadRow{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  padding:10px;
-  border-radius:14px;
+  display:flex;flex-direction:column;gap:8px;
+  padding:10px;border-radius:14px;
   border:1px dashed rgba(255,255,255,.14);
   background: rgba(255,255,255,.03);
 }
@@ -188,3 +183,61 @@ body{
   .grid{grid-template-columns: 1.2fr .8fr}
 }
 .authCard{max-width:520px;margin:0 auto}
+
+/* -------------------
+   CHAT UI
+------------------- */
+.chatWrap{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  height: 560px;
+}
+
+.chatList{
+  flex:1;
+  overflow:auto;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.20);
+}
+
+.chatMsg{
+  display:flex;
+  gap:10px;
+  padding:10px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.04);
+  margin-bottom: 10px;
+}
+
+.chatMeta{
+  font-size:12px;
+  color: rgba(234,234,255,.55);
+  margin-bottom: 4px;
+}
+
+.chatText{
+  color: rgba(234,234,255,.85);
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.chatComposer{
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  flex-wrap:wrap;
+}
+
+.chatInput{
+  flex: 1;
+  min-width: 220px;
+}
+
+.chatSmall{
+  font-size:12px;
+  color: rgba(234,234,255,.55);
+}
