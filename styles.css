@@ -6,6 +6,9 @@
   --muted: rgba(234,234,255,.65);
   --purple:#8B5CFF;
   --purple2:#B37CFF;
+  --good:#2EE59D;
+  --warn:#FFCC66;
+  --bad:#FF4D6D;
   --shadow: 0 18px 60px rgba(0,0,0,.55);
   --radius: 18px;
 }
@@ -21,18 +24,98 @@ body{
     radial-gradient(900px 500px at 15% 20%, rgba(80,130,255,.22), transparent 60%),
     radial-gradient(900px 600px at 70% 90%, rgba(179,124,255,.20), transparent 60%),
     linear-gradient(180deg, var(--bg0), var(--bg1));
-  overflow:hidden;
+  overflow-x:hidden;
 }
 
-/* screens */
-.screen{
-  height:100%;
+/* ========= Layout ========= */
+.container{max-width:1100px;margin:0 auto;padding:22px 18px 40px}
+.grid{display:grid;grid-template-columns:1fr;gap:14px}
+
+@media (min-width: 860px){
+  .grid{grid-template-columns: 1.2fr .8fr}
+}
+
+/* ========= Top / Brand ========= */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700}
+.brandRow{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.brandText{font-weight:800}
+
+.logo{
+  width:34px;height:34px;border-radius:11px;
+  background: linear-gradient(135deg, var(--purple), #3A63FF);
+  box-shadow: 0 10px 30px rgba(139,92,255,.35);
+  display:grid;place-items:center;
+}
+.logo::after{content:"";width:14px;height:14px;border-radius:4px;background:rgba(255,255,255,.85);opacity:.9}
+
+.actions{display:flex;align-items:center;gap:10px}
+.pill{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:7px 12px;border-radius:999px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.05);
+  color: var(--muted);
+  backdrop-filter: blur(10px);
+}
+
+.iconbtn{
+  width:40px;height:40px;border-radius:12px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.05);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  display:grid;place-items:center;
+  cursor:pointer;
+  transition: transform .12s ease, background .12s ease;
+}
+.iconbtn:hover{transform: translateY(-1px); background: rgba(255,255,255,.07)}
+.iconbtn:active{transform: translateY(0px) scale(.98)}
+
+/* ========= Hero ========= */
+.hero{padding:14px 0 10px}
+.h1{font-size:38px;line-height:1.05;margin:6px 0 6px}
+.h1 .accent{color:var(--purple2)}
+.sub{margin:0;color:var(--muted)}
+
+/* ========= Tabs ========= */
+/* Desktop: looks like pill group. Mobile: horizontal scroll and no wrap */
+.tabbar{
+  margin:18px 0 22px;
+  display:flex;
+  gap:10px;
+  padding:10px;
+  border-radius:16px;
+  border:1px solid var(--stroke);
+  background: rgba(255,255,255,.04);
+  backdrop-filter: blur(12px);
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tabbar::-webkit-scrollbar{height:0}
+.tab{
+  flex: 0 0 auto;
+  white-space: nowrap;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  padding:10px 12px;
+  border-radius:14px;
+  cursor:pointer;
   display:flex;
   align-items:center;
-  justify-content:center;
-  padding:16px;
+  gap:8px;
+  transition: background .12s ease, color .12s ease;
+}
+.tab:hover{background: rgba(255,255,255,.06); color: var(--text)}
+.tab.active{
+  background: linear-gradient(135deg, rgba(139,92,255,.35), rgba(58,99,255,.18));
+  color: var(--text);
+  border: 1px solid rgba(139,92,255,.35);
 }
 
+/* ========= Cards / Buttons / Inputs ========= */
 .card{
   border-radius:var(--radius);
   border:1px solid var(--stroke);
@@ -41,33 +124,8 @@ body{
   box-shadow: var(--shadow);
   padding:16px;
 }
-
-.authCard{ width:min(520px, 100%); }
-
-.brandRow{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.brandText{font-weight:900;letter-spacing:.2px}
-
-.logo{
-  width:34px;height:34px;border-radius:11px;
-  background: linear-gradient(135deg, var(--purple), #3A63FF);
-  box-shadow: 0 10px 30px rgba(139,92,255,.35);
-  display:grid;place-items:center;
-}
-.logo::after{content:"";width:14px;height:14px;border-radius:4px;background:rgba(255,255,255,.85)}
-
-.h1{font-size:34px;line-height:1.05;margin:10px 0 6px}
-.sub{margin:0 0 10px;color:var(--muted)}
-
-.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-.input{
-  width:100%;
-  border-radius:14px;border:1px solid var(--stroke);
-  background: rgba(0,0,0,.25);
-  color: var(--text);
-  padding:12px 12px;
-  outline:none;
-}
-.input::placeholder{color: rgba(234,234,255,.45)}
+.cardHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.cardTitle{font-size:20px;font-weight:800}
 
 .btn{
   border:0;cursor:pointer;border-radius:14px;
@@ -84,96 +142,213 @@ body{
   color: var(--text);
   box-shadow:none;
 }
-
-.hint{margin-top:10px;color:rgba(234,234,255,.75);font-size:13px}
-.empty{color:var(--muted);text-align:center;padding:22px 10px}
-
-/* app layout */
-.app{
-  height:100%;
-  display:flex;
-  flex-direction:column;
+.btn.danger{
+  background: rgba(255,77,109,.14);
+  border: 1px solid rgba(255,77,109,.30);
+  color: var(--text);
+  box-shadow:none;
 }
 
-.topbar{
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.input{
+  width:100%;
+  border-radius:14px;border:1px solid var(--stroke);
+  background: rgba(0,0,0,.25);
+  color: var(--text);
+  padding:12px 12px;
+  outline:none;
+}
+.input::placeholder{color: rgba(234,234,255,.45)}
+.textarea{min-height:150px;resize:vertical}
+
+.empty{color:var(--muted);text-align:center;padding:28px 10px}
+.hint{margin-top:10px;color:rgba(234,234,255,.75);font-size:13px}
+.mutedNote{margin-top:10px;color:rgba(234,234,255,.55);font-size:13px;line-height:1.4}
+
+/* ========= Upload row ========= */
+.uploadRow{
+  display:flex;flex-direction:column;gap:8px;
+  padding:10px;border-radius:14px;
+  border:1px dashed rgba(255,255,255,.14);
+  background: rgba(255,255,255,.03);
+}
+.file{
+  width:100%;
+  border-radius:12px;
+  border:1px solid var(--stroke);
+  padding:10px;
+  background: rgba(0,0,0,.25);
+  color: var(--muted);
+}
+.fileHint{font-size:13px;color:rgba(234,234,255,.55)}
+
+/* ========= Modal ========= */
+/* Desktop: centered. Mobile: near full-screen with safe padding and scroll */
+.modalOverlay{
+  position:fixed;inset:0;
+  display:grid;place-items:center;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(6px);
+  z-index:9999;
+  padding:18px;
+}
+.modal{
+  width:min(720px, 100%);
+  max-height: min(86vh, 860px);
+  overflow:auto;
+  border-radius:20px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(14,18,45,.75);
+  box-shadow: 0 24px 80px rgba(0,0,0,.65);
+  backdrop-filter: blur(14px);
+  padding:14px;
+}
+.modalWide{
+  width:min(980px, 100%);
+}
+.modalHead{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(14,18,45,.88);
+  backdrop-filter: blur(14px);
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:12px;
-  padding:14px 14px 10px;
+  gap:10px;
+  padding:8px 6px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px;
+}
+.modalTitle{font-size:18px;font-weight:900}
+.modalBody{display:flex;flex-direction:column;gap:10px;padding:10px 6px 10px}
+.modalActions{
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: rgba(14,18,45,.88);
+  backdrop-filter: blur(14px);
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  padding:10px 6px 8px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px;
 }
 
-.topbar .left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.topbar .right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-
-.name{font-weight:900}
-.pill{
-  display:inline-flex;align-items:center;
-  padding:6px 10px;border-radius:999px;
-  border:1px solid var(--stroke);
-  background: rgba(255,255,255,.05);
-  color: var(--muted);
-  backdrop-filter: blur(10px);
-  font-size:12px;
+/* Full view */
+.postMeta{
+  color: rgba(234,234,255,.55);
+  font-size: 13px;
+}
+.postBigText{
+  color: rgba(234,234,255,.85);
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 15px;
 }
 
-.chatShell{
-  flex:1;
+/* Clickable post cards */
+.postCard{
+  cursor:pointer;
+  transition: transform .12s ease, background .12s ease, border-color .12s ease;
+}
+.postCard:hover{
+  transform: translateY(-1px);
+  background: rgba(255,255,255,.07) !important;
+  border-color: rgba(139,92,255,.25) !important;
+}
+
+/* ========= Chat ========= */
+/* Make chat usable on phones without being insanely tall */
+.chatWrap{
   display:flex;
   flex-direction:column;
-  padding: 0 14px 14px;
-  gap:10px;
+  gap:12px;
+  height: 560px;
 }
-
 .chatList{
   flex:1;
   overflow:auto;
-  border-radius:18px;
-  border:1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.18);
-  padding:12px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.20);
 }
-
 .chatMsg{
   display:flex;
-  justify-content:space-between;
   gap:10px;
-  padding:10px 12px;
+  padding:10px;
   border-radius:14px;
   border:1px solid rgba(255,255,255,.08);
   background: rgba(255,255,255,.04);
-  margin-bottom:10px;
+  margin-bottom: 10px;
 }
-.chatMsg b{font-weight:900}
 .chatMeta{
   font-size:12px;
   color: rgba(234,234,255,.55);
-  margin-bottom:4px;
+  margin-bottom: 4px;
 }
 .chatText{
   color: rgba(234,234,255,.85);
   white-space: pre-wrap;
   line-height: 1.4;
 }
-
-.chatBar{
+.chatComposer{
   display:flex;
   gap:10px;
-  align-items:center;
+  align-items:flex-end;
+  flex-wrap:wrap;
 }
-.chatInput{flex:1}
-.chatSend{min-width:120px}
-
-.chatTiny{
+.chatInput{
+  flex: 1;
+  min-width: 220px;
+}
+.chatSmall{
   font-size:12px;
   color: rgba(234,234,255,.55);
-  padding: 0 2px;
 }
 
-/* mobile */
+/* ========= AUTH ========= */
+.authCard{max-width:520px;margin:0 auto}
+
+/* ========= MOBILE TUNING ========= */
 @media (max-width: 560px){
+  .container{padding:14px 12px 24px}
+
+  .topbar{margin-bottom:12px}
+  .logo{width:30px;height:30px;border-radius:10px}
+  .iconbtn{width:38px;height:38px}
+
+  .hero{padding:8px 0 6px}
   .h1{font-size:28px}
-  .topbar{padding:12px}
-  .chatShell{padding: 0 12px 12px}
-  .chatSend{min-width:96px}
+  .sub{font-size:14px}
+
+  .card{padding:12px;border-radius:16px}
+  .cardTitle{font-size:18px}
+
+  .tabbar{margin:12px 0 14px;padding:8px;border-radius:14px}
+  .tab{padding:9px 11px;border-radius:12px}
+
+  .btn{padding:10px 12px;border-radius:12px}
+  .input{padding:11px 11px;border-radius:12px}
+  .textarea{min-height:130px}
+
+  /* Chat: shrink height to fit phone screen better */
+  .chatWrap{height: 62vh;}
+  .chatList{padding:10px;border-radius:14px}
+  .chatMsg{padding:10px;border-radius:12px}
+
+  /* Modal: basically full-screen on phones */
+  .modalOverlay{padding:10px}
+  .modal, .modalWide{
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 18px;
+    padding: 10px;
+  }
+  .modalHead, .modalActions{
+    border-radius: 14px;
+    padding: 8px 6px;
+  }
 }
