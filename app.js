@@ -1,9 +1,10 @@
 // ===============================
-// THE HUB — app.js (v10 FULL COPY/PASTE)
+// THE HUB — app.js (v11 FULL COPY/PASTE)
 // Fixes:
-// 1) Non-admin posts are ALWAYS pending (approval required)
-// 2) Click any post -> full view modal
-// 3) Admin can delete chat messages (button visible to admins)
+// - Non-admin posts are ALWAYS pending (approval required)
+// - Click any post -> full view modal
+// - Admin can delete chat messages
+// - Admin can delete ANY post (approved or pending)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -115,13 +116,13 @@ const postViewTitle = document.getElementById("postViewTitle");
 const postViewMeta = document.getElementById("postViewMeta");
 const postViewText = document.getElementById("postViewText");
 const postViewFile = document.getElementById("postViewFile");
+const postDeleteBtn = document.getElementById("postDeleteBtn");
 
 // ===============================
 // State
 // ===============================
 let currentTab = "school";
 let currentUserProfile = null;
-let composerOpen = false;
 
 // Realtime unsubscribers
 let unsubPosts = null;
@@ -132,6 +133,9 @@ let unsubChat = null;
 
 // Cache for clickable posts
 let postCache = {}; // { [id]: postData }
+
+// currently opened post id (for delete)
+let currentPostViewId = null;
 
 // ===============================
 // Helpers
@@ -183,7 +187,7 @@ function renderFilePreview(url, type) {
     return `
       <div style="margin-top:10px;">
         <img src="${safeUrl}" alt="upload"
-          style="width:100%; max-height:420px; object-fit:cover; border-radius:14px; border:1px solid rgba(255,255,255,.10);" />
+          style="width:100%; max-height:520px; object-fit:cover; border-radius:14px; border:1px solid rgba(255,255,255,.10);" />
       </div>
     `;
   }
@@ -197,6 +201,7 @@ function renderFilePreview(url, type) {
 // Full view modal
 // ===============================
 window.closePostView = function () {
+  currentPostViewId = null;
   if (postViewOverlay) postViewOverlay.style.display = "none";
 };
 
@@ -204,18 +209,30 @@ window.openPostView = function (postId) {
   const p = postCache[postId];
   if (!p) return;
 
+  currentPostViewId = postId;
+
   if (postViewTitle) postViewTitle.textContent = p.title || "Post";
   const when = p.createdAt ? new Date(tsMs(p.createdAt)).toLocaleString() : "";
   if (postViewMeta) {
     postViewMeta.textContent = `${p.createdByEmail || "unknown"} • ${when} • ${String(p.section || "").toUpperCase()}`;
   }
   if (postViewText) postViewText.textContent = p.text || "";
+  if (postViewFile) postViewFile.innerHTML = p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : "";
 
-  if (postViewFile) {
-    postViewFile.innerHTML = p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : "";
-  }
+  // show delete button only for admins
+  if (postDeleteBtn) postDeleteBtn.style.display = isAdmin() ? "inline-block" : "none";
 
   if (postViewOverlay) postViewOverlay.style.display = "grid";
+};
+
+window.deleteCurrentPost = async function () {
+  if (!isAdmin()) return;
+  if (!currentPostViewId) return;
+
+  if (!confirm("Delete this post? This cannot be undone.")) return;
+
+  await deleteDoc(doc(db, "posts", currentPostViewId));
+  window.closePostView();
 };
 
 // Click handling for posts (event delegation)
@@ -286,7 +303,6 @@ window.showTab = function (tab) {
 // ===============================
 window.openComposer = function () {
   if (currentTab !== "school" && currentTab !== "media") return alert("New is only for School/Media.");
-  composerOpen = true;
 
   composerTitleEl.textContent = currentTab === "school" ? "New School Post" : "New Media Post";
   postTitleInput.value = "";
@@ -299,7 +315,6 @@ window.openComposer = function () {
 };
 
 window.closeComposer = function () {
-  composerOpen = false;
   composerOverlay.style.display = "none";
 };
 
@@ -318,9 +333,7 @@ window.submitPost = async function () {
 
   if (!title && !text && !file) return alert("Write something or attach a file.");
 
-  // IMPORTANT CHANGE:
-  // - Non-admin => ALWAYS pending (approval required)
-  // - Admin => approved
+  // Non-admin => ALWAYS pending
   const status = isAdmin() ? "approved" : "pending";
 
   let fileURL = "";
@@ -349,10 +362,7 @@ window.submitPost = async function () {
 
     window.closeComposer();
 
-    // If non-admin, tell them it went pending
-    if (!isAdmin()) {
-      alert("Posted ✅ Sent for approval (pending).");
-    }
+    if (!isAdmin()) alert("Posted ✅ Sent for approval (pending).");
   } catch (err) {
     console.error(err);
     alert(err?.message || "Failed to post.");
@@ -365,7 +375,6 @@ window.submitPost = async function () {
 function startRealtimePosts(section) {
   if (unsubPosts) unsubPosts();
   sectionBody.innerHTML = `<div class="empty">Loading...</div>`;
-
   postCache = {};
 
   const q = query(
@@ -575,7 +584,7 @@ window.changeRole = async function (uid, role) {
 };
 
 // ===============================
-// CHAT — The Boys
+// CHAT — The Boys (admin delete)
 // ===============================
 const CHAT_ROOM_ID = "theboys";
 
@@ -622,6 +631,7 @@ function startRealtimeChat() {
       const m = d.data();
       const id = d.id;
       const when = m.createdAt ? new Date(tsMs(m.createdAt)).toLocaleString() : "";
+
       const delBtn = isAdmin()
         ? `<button class="btn danger" style="padding:8px 10px;" onclick="deleteChatMsg('${id}')">Delete</button>`
         : "";
@@ -760,8 +770,8 @@ function renderTab() {
           <div style="font-weight:900; margin-bottom:8px;">Rules</div>
           <div style="color:rgba(234,234,255,.70); line-height:1.6">
             • Non-admin posts = <b>pending approval</b><br/>
-            • Admin posts = <b>instant</b><br/>
             • Click any post to full-view ✅<br/>
+            • Admin can delete posts ✅<br/>
             • Admin can delete chat messages ✅
           </div>
         </div>
