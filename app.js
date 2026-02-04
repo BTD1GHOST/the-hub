@@ -190,6 +190,91 @@ window.showTab = function showTab(tab) {
 };
 
 function renderTab() {
+  async function renderAdminUsers() {
+  sectionBody.innerHTML = `<div class="empty">Loading users...</div>`;
+
+  const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+  const snap = await getDocs(q);
+
+  if (snap.empty) {
+    sectionBody.innerHTML = `<div class="empty">No users found.</div>`;
+    return;
+  }
+
+  let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
+
+  snap.forEach((d) => {
+    const u = d.data();
+    const uid = d.id;
+
+    const email = u.email || "(no email)";
+    const role = u.role || "user";
+    const status = u.status || "pending";
+
+    const statusColor =
+      status === "approved" ? "var(--good)" :
+      status === "pending" ? "var(--warn)" :
+      "var(--bad)";
+
+    html += `
+      <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
+        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:700;">${email}</div>
+            <div style="color:rgba(234,234,255,.65); font-size:13px;">
+              <span style="color:${statusColor}; font-weight:700;">${status.toUpperCase()}</span>
+              • Role: <b>${role}</b>
+              • UID: <span style="opacity:.6;">${uid.slice(0,6)}…</span>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <select class="input" style="width:auto; padding:10px 12px;"
+              onchange="changeRole('${uid}', this.value)"
+              ${role === "owner" ? "disabled" : ""}>
+              ${["user","admin","owner"].map(r => `<option value="${r}" ${r===role?"selected":""}>${r}</option>`).join("")}
+            </select>
+
+            ${
+              status !== "approved"
+                ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
+                : `<button class="btn secondary" disabled>Approved</button>`
+            }
+
+            ${
+              status !== "banned"
+                ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
+                : `<button class="btn" onclick="unbanUser('${uid}')">Unban</button>`
+            }
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  sectionBody.innerHTML = html;
+}
+window.approveUser = async function approveUser(uid) {
+  await updateDoc(doc(db, "users", uid), { status: "approved" });
+  renderAdminUsers();
+};
+
+window.banUser = async function banUser(uid) {
+  await updateDoc(doc(db, "users", uid), { status: "banned" });
+  renderAdminUsers();
+};
+
+window.unbanUser = async function unbanUser(uid) {
+  await updateDoc(doc(db, "users", uid), { status: "approved" });
+  renderAdminUsers();
+};
+
+window.changeRole = async function changeRole(uid, role) {
+  await updateDoc(doc(db, "users", uid), { role });
+  renderAdminUsers();
+};
+
   if (!sectionTitle || !sectionBody) return;
 
   if (currentTab === "school") {
@@ -215,7 +300,8 @@ function renderTab() {
   if (currentTab === "chat") {
     sectionTitle.textContent = "The Boys";
     newBtn.style.display = "none";
-    sectionBody.innerHTML = `<div class="empty">Chat UI comes next.</div>`;
+   renderAdminUsers();
+
 
     sideTitle.textContent = "Chat Queue";
     sideBody.textContent = "Nothing pending.";
