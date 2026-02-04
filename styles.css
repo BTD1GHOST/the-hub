@@ -52,6 +52,14 @@ a{color:inherit}
   font-weight:700;
   letter-spacing:.2px;
 }
+.brandRow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom: 6px;
+}
+.brandText{font-weight:800}
+
 .logo{
   width:34px;height:34px;border-radius:11px;
   background: linear-gradient(135deg, var(--purple), #3A63FF);
@@ -121,6 +129,7 @@ a{color:inherit}
   background: rgba(255,255,255,.04);
   backdrop-filter: blur(12px);
   width: fit-content;
+  flex-wrap: wrap;
 }
 
 .tab{
@@ -166,7 +175,7 @@ a{color:inherit}
 }
 .cardTitle{
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 800;
   display:flex;align-items:center;gap:10px;
 }
 
@@ -208,14 +217,74 @@ a{color:inherit}
   outline:none;
 }
 .input::placeholder{color: rgba(234,234,255,.45)}
-.hr{
-  height:1px;
-  background: rgba(255,255,255,.08);
-  margin: 12px 0;
+
+.textarea{
+  min-height: 150px;
+  resize: vertical;
 }
 
-/* desktop */
+.hint{
+  margin-top: 10px;
+  color: rgba(234,234,255,.75);
+  font-size: 13px;
+}
+
+.mutedNote{
+  margin-top: 10px;
+  color: rgba(234,234,255,.55);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ===== Modal ===== */
+.modalOverlay{
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+  padding: 18px;
+}
+.modal{
+  width: min(720px, 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(14,18,45,.75);
+  box-shadow: 0 24px 80px rgba(0,0,0,.65);
+  backdrop-filter: blur(14px);
+  padding: 14px;
+}
+.modalHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  padding: 4px 4px 10px;
+}
+.modalTitle{
+  font-size: 18px;
+  font-weight: 900;
+}
+.modalBody{
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 4px 10px;
+}
+.modalActions{
+  display:flex;
+  justify-content:flex-end;
+  gap: 10px;
+  padding: 6px 4px 4px;
+}
+
 @media (min-width: 860px){
   .grid{grid-template-columns: 1.2fr .8fr}
 }
 
+.authCard{
+  max-width: 520px;
+  margin: 0 auto;
+}
