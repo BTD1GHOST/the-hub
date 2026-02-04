@@ -6,9 +6,6 @@
   <title>The Hub</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-    <!-- TOAST NOTIFICATIONS -->
-  <div id="toastWrap" class="toastWrap"></div>
-
 <body>
 
   <!-- AUTH -->
@@ -61,6 +58,10 @@
 
       <div class="actions">
         <span class="pill" id="rolePill">User</span>
+
+        <!-- 🔔 Enable Notifications button (added) -->
+        <button class="btn secondary" onclick="enableNotifications()">🔔</button>
+
         <button class="iconbtn" title="Logout" onclick="logout()">↗</button>
       </div>
     </div>
@@ -151,7 +152,9 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=12"></script>
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toastWrap" class="toastWrap"></div>
 
+  <script type="module" src="app.js?v=12"></script>
 </body>
 </html>
