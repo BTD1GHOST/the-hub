@@ -1,78 +1,60 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>The Hub</title>
-  <link rel="stylesheet" href="styles.css?v=21" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <!-- AUTH -->
-  <div class="screen" id="authScreen">
-    <div class="card authCard">
-      <div class="brandRow">
-        <div class="logo"></div>
-        <div class="brandText">The Hub</div>
-      </div>
+<div id="authScreen" class="container">
+  <div class="card authCard">
+    <h1>The Hub</h1>
+    <input id="email" class="input" placeholder="Email">
+    <input id="password" class="input" type="password" placeholder="Password">
+    <button class="btn" onclick="login()">Login</button>
+    <button class="btn secondary" onclick="signup()">Sign Up</button>
+    <div id="authHint" class="hint"></div>
+  </div>
+</div>
 
-      <h1 class="h1">Login</h1>
-      <p class="sub">Sign in or create an account.</p>
+<div id="pendingScreen" class="container" style="display:none;">
+  <div class="card">
+    <h2>Pending Approval</h2>
+    <p>Waiting for admin approval.</p>
+    <button class="btn secondary" onclick="logout()">Logout</button>
+  </div>
+</div>
 
-      <input class="input" id="emailInput" placeholder="Email" autocomplete="email"/>
-      <input class="input" id="passwordInput" type="password" placeholder="Password" autocomplete="current-password"/>
-
-      <div class="row">
-        <button class="btn" onclick="signup()">Sign Up</button>
-        <button class="btn secondary" onclick="login()">Login</button>
-      </div>
-
-      <div class="hint" id="authHint"></div>
+<div id="appScreen" class="container" style="display:none;">
+  <div class="topbar">
+    <div>
+      <b id="displayName">User</b>
+      <span class="pill" id="rolePill">USER</span>
     </div>
+    <button class="btn secondary" onclick="enableNotifications()">🔔 Enable Notifications</button>
+    <button class="btn secondary" onclick="logout()">Logout</button>
   </div>
 
-  <!-- PENDING -->
-  <div class="screen" id="pendingScreen" style="display:none;">
-    <div class="card authCard">
-      <div class="cardHead">
-        <div class="cardTitle">Pending Approval</div>
-        <button class="btn secondary" onclick="logout()">Logout</button>
-      </div>
-      <div class="empty">
-        Your account is pending approval.<br/>
-        An admin has to approve you before you can use the site.
-      </div>
-    </div>
+  <div class="tabbar">
+    <button class="tab active" onclick="showTab('chat')">💬 Chat</button>
+    <button class="tab" onclick="showTab('admin')" id="adminTab" style="display:none;">🛡 Admin</button>
   </div>
 
-  <!-- APP -->
-  <div class="app" id="appScreen" style="display:none;">
-    <div class="topbar">
-      <div class="left">
-        <div class="name" id="displayName">User</div>
-        <span class="pill" id="rolePill">USER</span>
-      </div>
+  <div id="sectionBody"></div>
+</div>
 
-      <div class="right">
-        <button class="btn secondary" onclick="enableNotifications()">🔔 Enable Notifications</button>
-        <button class="btn secondary" onclick="logout()">Logout</button>
-      </div>
-    </div>
+<!-- CHAT MODAL -->
+<div id="postViewOverlay" class="modalOverlay" style="display:none;"></div>
 
-    <div class="chatShell">
-      <div class="chatList" id="chatList">
-        <div class="empty">Loading chat…</div>
-      </div>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/firebase-messaging-sw.js");
+}
+</script>
 
-      <div class="chatBar">
-        <input class="input chatInput" id="chatInput" placeholder="Type a message…" />
-        <button class="btn chatSend" onclick="sendMessage()">Send</button>
-      </div>
-
-      <div class="chatTiny" id="chatTiny">Realtime • Free notifications (works when browser/app is running)</div>
-    </div>
-  </div>
-
-  <script type="module" src="app.js?v=21"></script>
+<script type="module" src="app.js?v=20"></script>
 </body>
 </html>
