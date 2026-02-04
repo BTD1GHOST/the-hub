@@ -326,7 +326,7 @@ onAuthStateChanged(auth, async (user) => {
 // OPTIONAL: quick “make me admin” helper (REMOVE LATER)
 // Only use once, then delete this function.
 // ===============================
-window.makeMeAdminOnce = async function makeMeAdminOnce() {
+
   const user = auth.currentUser;
   if (!user) return alert("Not logged in.");
 
