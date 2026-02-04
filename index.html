@@ -92,7 +92,7 @@
           <div class="cardTitle" id="sideTitle">Queue</div>
           <button class="btn secondary" onclick="refreshSide()">Refresh</button>
         </div>
-        <div id="sideBody" class="empty">Nothing pending.</div>
+        <div id="sideBody" class="empty">Auto-refresh: every 5s</div>
       </div>
     </div>
 
@@ -110,8 +110,14 @@
         <input class="input" id="postTitle" placeholder="Title (optional)" />
         <textarea class="input textarea" id="postText" placeholder="Write something..."></textarea>
 
-        <div class="mutedNote">
-          Text posts are instant. Uploads come next (Cloudinary) and will use approvals.
+        <!-- Upload -->
+        <div class="uploadRow">
+          <input class="file" type="file" id="postFile" accept="image/*,application/pdf" />
+          <div class="fileHint" id="fileHint">Optional: attach image/PDF. (Non-admin uploads require approval)</div>
+        </div>
+
+        <div class="mutedNote" id="postRuleNote">
+          Rule: Text-only = instant. File attached = pending unless admin/owner.
         </div>
       </div>
 
@@ -122,6 +128,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=6"></script>
+  <script type="module" src="app.js?v=7"></script>
 </body>
 </html>
