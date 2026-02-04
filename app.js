@@ -49,8 +49,8 @@ console.log("Firebase connected");
 // ===============================
 // Cloudinary (later)
 // ===============================
-const CLOUD_NAME = "";
-const UPLOAD_PRESET = "";
+const CLOUD_NAME = "dlsh8f5qh";
+const UPLOAD_PRESET = "hub_upload";
 
 // ===============================
 // DOM refs
