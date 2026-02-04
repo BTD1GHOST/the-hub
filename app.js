@@ -1,7 +1,7 @@
 // ===============================
-// THE HUB — clean app.js (v1)
+// THE HUB — app.js (clean rebuild)
 // Firebase Auth + Firestore
-// Cloudinary upload helper (we’ll use later)
+// Cloudinary helper included (optional, later)
 // ===============================
 
 // ===== Firebase imports =====
@@ -26,7 +26,7 @@ import {
   orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// ===== YOUR Firebase config (PASTE YOUR REAL VALUES HERE) =====
+// ===== Firebase config =====
 const firebaseConfig = {
   apiKey: "AIzaSyA9Mq0eCDuicDEejmtqCwlWnZ4otvz9FdY",
   authDomain: "the-hub-f09c4.firebaseapp.com",
@@ -44,18 +44,14 @@ const db = getFirestore(app);
 console.log("Firebase connected");
 
 // ===============================
-// Cloudinary (we’ll use later for uploads)
-// Put your values later when ready
+// Cloudinary (OPTIONAL — later)
 // ===============================
-const CLOUD_NAME = ""; // ex: "abcd123"
-const UPLOAD_PRESET = ""; // ex: "hub_upload"
+const CLOUD_NAME = "";      // put your cloud name later
+const UPLOAD_PRESET = "";   // put your preset later (hub_upload)
 
 async function uploadToCloudinary(file) {
-  if (!CLOUD_NAME || !UPLOAD_PRESET) {
-    throw new Error("Cloudinary not configured yet.");
-  }
+  if (!CLOUD_NAME || !UPLOAD_PRESET) throw new Error("Cloudinary not configured.");
 
-  // Optional safety check (we’ll expand later)
   const allowed = [
     "image/jpeg",
     "image/png",
@@ -104,12 +100,18 @@ const sideTitle = document.getElementById("sideTitle");
 const sideBody = document.getElementById("sideBody");
 
 // ===============================
-// Simple view helpers
+// State
+// ===============================
+let currentTab = "school";
+let currentUserProfile = null;
+
+// ===============================
+// UI helpers
 // ===============================
 function showOnly(which) {
-  authScreen.style.display = which === "auth" ? "flex" : "none";
-  pendingScreen.style.display = which === "pending" ? "flex" : "none";
-  appScreen.style.display = which === "app" ? "block" : "none";
+  if (authScreen) authScreen.style.display = which === "auth" ? "flex" : "none";
+  if (pendingScreen) pendingScreen.style.display = which === "pending" ? "flex" : "none";
+  if (appScreen) appScreen.style.display = which === "app" ? "block" : "none";
 }
 
 function setHint(msg) {
@@ -120,21 +122,16 @@ function setHint(msg) {
 // ===============================
 // AUTH: Sign Up / Login / Logout
 // ===============================
-window.signup = async function signup() {
+window.signup = async function () {
   const email = (emailInput?.value || "").trim();
   const password = passwordInput?.value || "";
-
   setHint("");
 
-  if (!email || !password) {
-    setHint("Enter email and password.");
-    return;
-  }
+  if (!email || !password) return setHint("Enter email and password.");
 
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
 
-    // Create a user doc (pending by default)
     await setDoc(doc(db, "users", cred.user.uid), {
       email,
       displayName: email.split("@")[0],
@@ -145,43 +142,36 @@ window.signup = async function signup() {
 
     setHint("Account created. Waiting for approval.");
   } catch (err) {
-    setHint(err?.message || "Signup failed.");
     console.error(err);
+    setHint(err?.message || "Signup failed.");
   }
 };
 
-window.login = async function login() {
+window.login = async function () {
   const email = (emailInput?.value || "").trim();
   const password = passwordInput?.value || "";
-
   setHint("");
 
-  if (!email || !password) {
-    setHint("Enter email and password.");
-    return;
-  }
+  if (!email || !password) return setHint("Enter email and password.");
 
   try {
     await signInWithEmailAndPassword(auth, email, password);
   } catch (err) {
-    setHint(err?.message || "Login failed.");
     console.error(err);
+    setHint(err?.message || "Login failed.");
   }
 };
 
-window.logout = async function logout() {
+window.logout = async function () {
   await signOut(auth);
 };
 
 // ===============================
-// TAB UI (basic)
+// Tabs
 // ===============================
-let currentTab = "school";
-
-window.showTab = function showTab(tab) {
+window.showTab = function (tab) {
   currentTab = tab;
 
-  // highlight tabs
   document.querySelectorAll(".tab").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === tab);
   });
@@ -189,8 +179,10 @@ window.showTab = function showTab(tab) {
   renderTab();
 };
 
-function renderTab() {
-  async function renderAdminUsers() {
+// ===============================
+// Admin: Users panel
+// ===============================
+async function renderAdminUsers() {
   sectionBody.innerHTML = `<div class="empty">Loading users...</div>`;
 
   const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
@@ -216,6 +208,8 @@ function renderTab() {
       status === "pending" ? "var(--warn)" :
       "var(--bad)";
 
+    const isOwner = role === "owner";
+
     html += `
       <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
@@ -231,7 +225,7 @@ function renderTab() {
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <select class="input" style="width:auto; padding:10px 12px;"
               onchange="changeRole('${uid}', this.value)"
-              ${role === "owner" ? "disabled" : ""}>
+              ${isOwner ? "disabled" : ""}>
               ${["user","admin","owner"].map(r => `<option value="${r}" ${r===role?"selected":""}>${r}</option>`).join("")}
             </select>
 
@@ -255,72 +249,76 @@ function renderTab() {
   html += `</div>`;
   sectionBody.innerHTML = html;
 }
-window.approveUser = async function approveUser(uid) {
+
+window.approveUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "approved" });
   renderAdminUsers();
 };
 
-window.banUser = async function banUser(uid) {
+window.banUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "banned" });
   renderAdminUsers();
 };
 
-window.unbanUser = async function unbanUser(uid) {
+window.unbanUser = async function (uid) {
   await updateDoc(doc(db, "users", uid), { status: "approved" });
   renderAdminUsers();
 };
 
-window.changeRole = async function changeRole(uid, role) {
+window.changeRole = async function (uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
   renderAdminUsers();
 };
 
+// ===============================
+// Render tab content
+// ===============================
+function renderTab() {
   if (!sectionTitle || !sectionBody) return;
 
   if (currentTab === "school") {
     sectionTitle.textContent = "School Work";
-    newBtn.style.display = "inline-block";
+    if (newBtn) newBtn.style.display = "inline-block";
     sectionBody.innerHTML = `<div class="empty">No posts yet in this section.</div>`;
 
-    sideTitle.textContent = "Queue";
-    sideBody.textContent = "Nothing pending.";
-    sideCard.style.display = "block";
+    if (sideTitle) sideTitle.textContent = "Queue";
+    if (sideBody) sideBody.textContent = "Nothing pending.";
+    if (sideCard) sideCard.style.display = "block";
   }
 
   if (currentTab === "media") {
     sectionTitle.textContent = "Media";
-    newBtn.style.display = "inline-block";
+    if (newBtn) newBtn.style.display = "inline-block";
     sectionBody.innerHTML = `<div class="empty">No media yet.</div>`;
 
-    sideTitle.textContent = "Queue";
-    sideBody.textContent = "Nothing pending.";
-    sideCard.style.display = "block";
+    if (sideTitle) sideTitle.textContent = "Queue";
+    if (sideBody) sideBody.textContent = "Nothing pending.";
+    if (sideCard) sideCard.style.display = "block";
   }
 
   if (currentTab === "chat") {
     sectionTitle.textContent = "The Boys";
-    newBtn.style.display = "none";
-   renderAdminUsers();
+    if (newBtn) newBtn.style.display = "none";
+    sectionBody.innerHTML = `<div class="empty">Chat UI comes next.</div>`;
 
-
-    sideTitle.textContent = "Chat Queue";
-    sideBody.textContent = "Nothing pending.";
-    sideCard.style.display = "block";
+    if (sideTitle) sideTitle.textContent = "Chat Queue";
+    if (sideBody) sideBody.textContent = "Nothing pending.";
+    if (sideCard) sideCard.style.display = "block";
   }
 
   if (currentTab === "admin") {
     sectionTitle.textContent = "Admin Panel";
-    newBtn.style.display = "none";
-    sectionBody.innerHTML = `<div class="empty">Admin user list comes next.</div>`;
+    if (newBtn) newBtn.style.display = "none";
+    renderAdminUsers();
 
-    sideTitle.textContent = "Approvals";
-    sideBody.textContent = "Nothing pending.";
-    sideCard.style.display = "block";
+    if (sideTitle) sideTitle.textContent = "Approvals";
+    if (sideBody) sideBody.textContent = "Nothing pending.";
+    if (sideCard) sideCard.style.display = "block";
   }
 
   if (currentTab === "info") {
     sectionTitle.textContent = "Info";
-    newBtn.style.display = "none";
+    if (newBtn) newBtn.style.display = "none";
     sectionBody.innerHTML = `
       <div class="empty">
         <div style="text-align:left; max-width:520px; margin: 0 auto;">
@@ -334,34 +332,35 @@ window.changeRole = async function changeRole(uid, role) {
         </div>
       </div>
     `;
-
-    sideCard.style.display = "none";
+    if (sideCard) sideCard.style.display = "none";
   }
 }
 
-window.openComposer = function openComposer() {
-  alert("Composer comes next — we’ll add the modal after admin approvals.");
+// ===============================
+// Misc buttons
+// ===============================
+window.openComposer = function () {
+  alert("Composer comes next — after posts + approvals are wired.");
 };
 
-window.refreshSide = function refreshSide() {
-  // placeholder for now
-  sideBody.textContent = "Nothing pending.";
+window.refreshSide = function () {
+  if (sideBody) sideBody.textContent = "Nothing pending.";
 };
 
 // ===============================
-// AUTH STATE — decides which screen to show
+// Auth state: decide which screen to show
 // ===============================
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
+    currentUserProfile = null;
     showOnly("auth");
     return;
   }
 
-  // make sure user doc exists
   const userRef = doc(db, "users", user.uid);
   const snap = await getDoc(userRef);
 
-  // If user logged in but doc is missing (rare), create it
+  // If missing user doc, create pending
   if (!snap.exists()) {
     await setDoc(userRef, {
       email: user.email || "",
@@ -375,8 +374,9 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   const data = snap.data();
+  currentUserProfile = data;
 
-  // banned check
+  // banned
   if (data.status === "banned") {
     showOnly("auth");
     setHint("This account is banned.");
@@ -384,7 +384,7 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  // pending check
+  // pending
   if (data.status === "pending") {
     showOnly("pending");
     return;
@@ -393,13 +393,15 @@ onAuthStateChanged(auth, async (user) => {
   // approved => app
   showOnly("app");
 
-  // fill header UI
-  displayNameEl.textContent = data.displayName || data.email || "User";
-  rolePill.textContent = (data.role || "user").toUpperCase();
-  subTitle.textContent =
-    data.role === "admin" || data.role === "owner"
-      ? "Administrator Dashboard"
-      : "Dashboard";
+  // header UI
+  if (displayNameEl) displayNameEl.textContent = data.displayName || data.email || "User";
+  if (rolePill) rolePill.textContent = (data.role || "user").toUpperCase();
+  if (subTitle) {
+    subTitle.textContent =
+      data.role === "admin" || data.role === "owner"
+        ? "Administrator Dashboard"
+        : "Dashboard";
+  }
 
   // show/hide admin tab
   const adminTabBtn = document.querySelector('.tab[data-tab="admin"]');
@@ -411,19 +413,3 @@ onAuthStateChanged(auth, async (user) => {
   // render current tab
   renderTab();
 });
-
-// ===============================
-// OPTIONAL: quick “make me admin” helper (REMOVE LATER)
-// Only use once, then delete this function.
-// ===============================
-
-  const user = auth.currentUser;
-  if (!user) return alert("Not logged in.");
-
-  await updateDoc(doc(db, "users", user.uid), {
-    role: "admin",
-    status: "approved"
-  });
-
-  alert("Set to admin+approved. Refresh the page. Then DELETE makeMeAdminOnce()");
-};
