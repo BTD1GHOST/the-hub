@@ -1,10 +1,11 @@
 // ===============================
-// THE HUB — app.js (v11 FULL COPY/PASTE)
+// THE HUB — app.js (v11 + Nicknames)
 // Fixes:
 // - Non-admin posts are ALWAYS pending (approval required)
 // - Click any post -> full view modal
 // - Admin can delete chat messages
 // - Admin can delete ANY post (approved or pending)
+// + Admin can set nicknames (displayed instead of email)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -123,12 +124,15 @@ const postDeleteBtn = document.getElementById("postDeleteBtn");
 let currentTab = "school";
 let currentUserProfile = null;
 
-// Realtime unsubscribers
+// Realtime unsubscribers (TAB-SCOPED)
 let unsubPosts = null;
 let unsubPendingCount = null;
 let unsubAdminUsers = null;
 let unsubAdminPendingPosts = null;
 let unsubChat = null;
+
+// Global realtime (NOT killed on tab switch)
+let unsubUserNames = null;
 
 // Cache for clickable posts
 let postCache = {}; // { [id]: postData }
@@ -161,13 +165,20 @@ function isAdmin() {
   return currentUserProfile?.role === "admin" || currentUserProfile?.role === "owner";
 }
 
-function cleanupRealtime() {
+function cleanupTabRealtime() {
   if (unsubPosts) unsubPosts();
   if (unsubPendingCount) unsubPendingCount();
   if (unsubAdminUsers) unsubAdminUsers();
   if (unsubAdminPendingPosts) unsubAdminPendingPosts();
   if (unsubChat) unsubChat();
+
   unsubPosts = unsubPendingCount = unsubAdminUsers = unsubAdminPendingPosts = unsubChat = null;
+}
+
+function cleanupAllRealtime() {
+  cleanupTabRealtime();
+  if (unsubUserNames) unsubUserNames();
+  unsubUserNames = null;
 }
 
 function tsMs(ts) {
@@ -199,6 +210,40 @@ function renderFilePreview(url, type) {
 }
 
 // ===============================
+// Nicknames / Display Names (Realtime cache)
+// ===============================
+let userNameCache = {}; // { [uid]: { nickname, displayName, email } }
+
+function displayNameFor(uid, emailFallback = "") {
+  const u = userNameCache?.[uid];
+  const name =
+    (u?.nickname || "").trim() ||
+    (u?.displayName || "").trim() ||
+    (u?.email || "").trim() ||
+    (emailFallback || "").trim();
+  return name || "unknown";
+}
+
+function startRealtimeUserNames() {
+  if (unsubUserNames) unsubUserNames();
+  unsubUserNames = onSnapshot(collection(db, "users"), (snap) => {
+    const next = {};
+    snap.forEach((d) => {
+      const data = d.data() || {};
+      next[d.id] = {
+        nickname: data.nickname || "",
+        displayName: data.displayName || "",
+        email: data.email || ""
+      };
+    });
+    userNameCache = next;
+
+    // Refresh current tab so labels update instantly
+    try { renderTab(); } catch {}
+  });
+}
+
+// ===============================
 // Full view modal
 // ===============================
 window.closePostView = function () {
@@ -216,7 +261,8 @@ window.openPostView = function (postId) {
 
   const when = p.createdAt ? new Date(tsMs(p.createdAt)).toLocaleString() : "";
   if (postViewMeta) {
-    postViewMeta.textContent = `${p.createdByEmail || "unknown"} • ${when} • ${String(p.section || "").toUpperCase()}`;
+    const who = displayNameFor(p.createdBy, p.createdByEmail || "");
+    postViewMeta.textContent = `${who} • ${when} • ${String(p.section || "").toUpperCase()}`;
   }
 
   if (postViewText) postViewText.textContent = p.text || "";
@@ -259,6 +305,7 @@ window.signup = async function () {
       displayName: email.split("@")[0],
       role: "user",
       status: "pending",
+      nickname: "",
       createdAt: Date.now()
     });
     setHint("Account created. Waiting for approval.");
@@ -283,7 +330,7 @@ window.login = async function () {
 };
 
 window.logout = async function () {
-  cleanupRealtime();
+  cleanupAllRealtime();
   await signOut(auth);
 };
 
@@ -401,13 +448,14 @@ function startRealtimePosts(section) {
 
       let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
       for (const p of posts) {
+        const who = displayNameFor(p.createdBy, p.createdByEmail || "");
         html += `
           <div class="card postCard" data-postid="${escapeHTML(p.id)}" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
             ${p.title ? `<div style="font-weight:900; margin-bottom:6px;">${escapeHTML(p.title)}</div>` : ""}
             ${p.text ? `<div style="color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5; max-height: 4.2em; overflow:hidden;">${escapeHTML(p.text)}</div>` : ""}
             ${p.fileURL ? `<div style="margin-top:8px; color:rgba(234,234,255,.55); font-size:12px;">Attachment included • click to view</div>` : ""}
             <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">
-              ${escapeHTML(p.createdByEmail || "unknown")} • click to open
+              ${escapeHTML(who)} • click to open
             </div>
           </div>
         `;
@@ -473,8 +521,9 @@ function startRealtimeAdminPanel() {
         : `
           <div style="display:flex; flex-direction:column; gap:12px;">
             ${pendingPosts
-              .map(
-                (p) => `
+              .map((p) => {
+                const who = displayNameFor(p.createdBy, p.createdByEmail || "");
+                return `
                 <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
                   <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
                     <div style="flex:1; min-width:260px;">
@@ -482,7 +531,7 @@ function startRealtimeAdminPanel() {
                       ${p.title ? `<div style="margin-top:6px; font-weight:800;">${escapeHTML(p.title)}</div>` : ""}
                       ${p.text ? `<div style="margin-top:6px; color:rgba(234,234,255,.78); white-space:pre-wrap; line-height:1.5;">${escapeHTML(p.text)}</div>` : ""}
                       ${p.fileURL ? renderFilePreview(p.fileURL, p.fileType) : ""}
-                      <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">From ${escapeHTML(p.createdByEmail || "unknown")}</div>
+                      <div style="margin-top:10px; color:rgba(234,234,255,.45); font-size:12px;">From ${escapeHTML(who)}</div>
                     </div>
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                       <button class="btn" onclick="approvePost('${p.id}')">Approve</button>
@@ -490,8 +539,8 @@ function startRealtimeAdminPanel() {
                     </div>
                   </div>
                 </div>
-              `
-              )
+              `;
+              })
               .join("")}
           </div>
         `;
@@ -504,6 +553,7 @@ function startRealtimeAdminPanel() {
             const role = u.role || "user";
             const status = u.status || "pending";
             const uid = u.id;
+            const nick = u.nickname || "";
             const statusColor =
               status === "approved" ? "var(--good)" : status === "pending" ? "var(--warn)" : "var(--bad)";
             const isOwner = role === "owner";
@@ -511,15 +561,18 @@ function startRealtimeAdminPanel() {
             return `
               <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
                 <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
-                  <div>
-                    <div style="font-weight:800;">${escapeHTML(email)}</div>
+                  <div style="min-width:260px;">
+                    <div style="font-weight:800;">
+                      ${escapeHTML(nick ? `${nick} (${email})` : email)}
+                    </div>
                     <div style="color:rgba(234,234,255,.65); font-size:13px;">
                       <span style="color:${statusColor}; font-weight:900;">${escapeHTML(status.toUpperCase())}</span>
                       • Role: <b>${escapeHTML(role)}</b>
                       • UID: <span style="opacity:.6;">${uid.slice(0, 6)}…</span>
                     </div>
                   </div>
-                  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+
+                  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
                     <select class="input" style="width:auto; padding:10px 12px;" onchange="changeRole('${uid}', this.value)" ${
                       isOwner ? "disabled" : ""
                     }>
@@ -527,11 +580,23 @@ function startRealtimeAdminPanel() {
                         .map((r) => `<option value="${r}" ${r === role ? "selected" : ""}>${r}</option>`)
                         .join("")}
                     </select>
+
+                    <input class="input" style="width:180px; padding:10px 12px;" placeholder="Nickname"
+                      value="${escapeHTML(nick)}"
+                      oninput="this.dataset.val=this.value" ${isOwner ? "disabled" : ""} />
+
+                    <button class="btn secondary" onclick="setNickname('${uid}', this.previousElementSibling.dataset.val ?? this.previousElementSibling.value)" ${
+                      isOwner ? "disabled" : ""
+                    }>
+                      Save Nick
+                    </button>
+
                     ${
                       status !== "approved"
                         ? `<button class="btn" onclick="approveUser('${uid}')">Approve</button>`
                         : `<button class="btn secondary" disabled>Approved</button>`
                     }
+
                     ${
                       status !== "banned"
                         ? `<button class="btn secondary" onclick="banUser('${uid}')">Ban</button>`
@@ -592,6 +657,12 @@ window.changeRole = async function (uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
 };
 
+window.setNickname = async function (uid, nickname) {
+  if (!isAdmin()) return;
+  const clean = String(nickname || "").trim();
+  await updateDoc(doc(db, "users", uid), { nickname: clean });
+};
+
 // ===============================
 // CHAT — The Boys (admin delete)
 // ===============================
@@ -646,11 +717,13 @@ function startRealtimeChat() {
           ? `<button class="btn danger" style="padding:8px 10px;" onclick="deleteChatMsg('${id}')">Delete</button>`
           : "";
 
+        const who = displayNameFor(m.createdBy, m.createdByEmail || "");
+
         html += `
           <div class="chatMsg">
             <div style="flex:1;">
               <div class="chatMeta">
-                <b>${escapeHTML(m.createdByEmail || "unknown")}</b> • ${escapeHTML(when)}
+                <b>${escapeHTML(who)}</b> • ${escapeHTML(when)}
               </div>
               ${m.text ? `<div class="chatText">${escapeHTML(m.text)}</div>` : ""}
               ${m.fileURL ? renderFilePreview(m.fileURL, m.fileType) : ""}
@@ -731,7 +804,7 @@ window.deleteChatMsg = async function (messageId) {
 function renderTab() {
   if (!sectionTitle || !sectionBody) return;
 
-  cleanupRealtime();
+  cleanupTabRealtime();
 
   if (currentTab === "school") {
     sectionTitle.textContent = "School Work";
@@ -781,7 +854,8 @@ function renderTab() {
             • Non-admin posts = <b>pending approval</b><br/>
             • Click any post to full-view ✅<br/>
             • Admin can delete posts ✅<br/>
-            • Admin can delete chat messages ✅
+            • Admin can delete chat messages ✅<br/>
+            • Admin can set nicknames ✅
           </div>
         </div>
       </div>
@@ -798,7 +872,7 @@ window.refreshSide = function () {
 // Auth state
 // ===============================
 onAuthStateChanged(auth, async (user) => {
-  cleanupRealtime();
+  cleanupAllRealtime();
 
   if (!user) {
     currentUserProfile = null;
@@ -815,6 +889,7 @@ onAuthStateChanged(auth, async (user) => {
       displayName: (user.email || "User").split("@")[0],
       role: "user",
       status: "pending",
+      nickname: "",
       createdAt: Date.now()
     });
     showOnly("pending");
@@ -838,7 +913,13 @@ onAuthStateChanged(auth, async (user) => {
 
   showOnly("app");
 
-  if (displayNameEl) displayNameEl.textContent = data.displayName || data.email || "User";
+  // Start realtime nickname/display cache
+  startRealtimeUserNames();
+
+  // Show YOUR display name in the header using the same priority
+  const myName = displayNameFor(user.uid, data.email || user.email || "");
+  if (displayNameEl) displayNameEl.textContent = myName;
+
   if (rolePill) rolePill.textContent = (data.role || "user").toUpperCase();
   if (subTitle) subTitle.textContent = isAdmin() ? "Administrator Dashboard" : "Dashboard";
 
