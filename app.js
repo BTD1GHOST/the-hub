@@ -811,7 +811,8 @@ window.deleteChatMsg = async function (messageId) {
 // For Tutor to work reliably, open the Hub via a local server (http://localhost/...)
 // ===============================
 const OLLAMA_URL = "http://localhost:11434/api/chat";
-const OLLAMA_MODEL = "qwen2.5vl"; // fallback: "llava"
+const OLLAMA_MODEL = "llava";
+
 
 function tutorTemplate() {
   return `
