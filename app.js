@@ -1,11 +1,12 @@
 // ===============================
-// THE HUB — app.js (v11 + Nicknames)
+// THE HUB — app.js (v11 + Nicknames + Owner self-edit nick)
 // Fixes:
 // - Non-admin posts are ALWAYS pending (approval required)
 // - Click any post -> full view modal
 // - Admin can delete chat messages
 // - Admin can delete ANY post (approved or pending)
 // + Admin can set nicknames (displayed instead of email)
+// + Owner can set THEIR OWN nickname (was blocked)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -557,6 +558,10 @@ function startRealtimeAdminPanel() {
             const statusColor =
               status === "approved" ? "var(--good)" : status === "pending" ? "var(--warn)" : "var(--bad)";
             const isOwner = role === "owner";
+            const isMe = auth.currentUser?.uid === uid;
+
+            // ✅ Only disable nickname editing if it's an owner AND not me
+            const nickDisabled = isOwner && !isMe;
 
             return `
               <div class="card" style="padding:14px; background:rgba(255,255,255,.05); box-shadow:none;">
@@ -583,10 +588,10 @@ function startRealtimeAdminPanel() {
 
                     <input class="input" style="width:180px; padding:10px 12px;" placeholder="Nickname"
                       value="${escapeHTML(nick)}"
-                      oninput="this.dataset.val=this.value" ${isOwner ? "disabled" : ""} />
+                      oninput="this.dataset.val=this.value" ${nickDisabled ? "disabled" : ""} />
 
                     <button class="btn secondary" onclick="setNickname('${uid}', this.previousElementSibling.dataset.val ?? this.previousElementSibling.value)" ${
-                      isOwner ? "disabled" : ""
+                      nickDisabled ? "disabled" : ""
                     }>
                       Save Nick
                     </button>
@@ -855,7 +860,8 @@ function renderTab() {
             • Click any post to full-view ✅<br/>
             • Admin can delete posts ✅<br/>
             • Admin can delete chat messages ✅<br/>
-            • Admin can set nicknames ✅
+            • Admin can set nicknames ✅<br/>
+            • Owner can set their own nickname ✅
           </div>
         </div>
       </div>
