@@ -7,7 +7,6 @@
 // - Admin can delete ANY post (approved or pending)
 // + Admin can set nicknames (displayed instead of email)
 // + Owner can set THEIR OWN nickname (was blocked)
-// + Tutor tab (100% free local AI via Ollama - vision)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -805,135 +804,6 @@ window.deleteChatMsg = async function (messageId) {
 };
 
 // ===============================
-// AI TUTOR (100% FREE via local Ollama)
-// NOTE: This calls your *local* computer at http://localhost:11434
-// If your site is served over HTTPS (GitHub Pages), browsers may block mixed-content requests.
-// For Tutor to work reliably, open the Hub via a local server (http://localhost/...)
-// ===============================
-const OLLAMA_URL = "http://localhost:11434/api/chat";
-const OLLAMA_MODEL = "llava";
-
-
-function tutorTemplate() {
-  return `
-    <div style="display:flex; flex-direction:column; gap:12px;">
-      <div style="color:rgba(238,242,255,.80); line-height:1.5;">
-        <b>Study Tutor</b> (runs on your computer — free). Upload a photo/screenshot and ask a question.
-        <div class="mutedNote" style="margin-top:8px;">
-          If this tab says it can’t reach Ollama, make sure Ollama is running and you opened the Hub on <b>http://localhost</b> (not https).
-        </div>
-      </div>
-
-      <input class="file" type="file" id="tutorImg" accept="image/*" />
-
-      <textarea class="input textarea" id="tutorQ"
-        placeholder="Ask your question... (ex: 'Solve #4 and explain each step')"
-        style="min-height:120px;"></textarea>
-
-      <div class="row">
-        <button class="btn" onclick="runTutor()">Analyze</button>
-        <button class="btn secondary" onclick="clearTutor()">Clear</button>
-      </div>
-
-      <div class="hint" id="tutorHint"></div>
-
-      <textarea class="input textarea" id="tutorA"
-        placeholder="Answer will appear here..."
-        style="min-height:240px;" readonly></textarea>
-
-      <div class="mutedNote">
-        Tip: ask it to show steps and to double-check. No AI is perfect — verification is how you stay “right.”
-      </div>
-    </div>
-  `;
-}
-
-function setTutorHint(msg) {
-  const el = document.getElementById("tutorHint");
-  if (el) el.textContent = msg || "";
-}
-
-window.clearTutor = function () {
-  const img = document.getElementById("tutorImg");
-  const q = document.getElementById("tutorQ");
-  const a = document.getElementById("tutorA");
-  if (img) img.value = "";
-  if (q) q.value = "";
-  if (a) a.value = "";
-  setTutorHint("");
-};
-
-async function fileToBase64NoPrefix(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => {
-      const s = String(r.result || "");
-      const b64 = s.includes(",") ? s.split(",")[1] : s;
-      resolve(b64);
-    };
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-}
-
-window.runTutor = async function () {
-  const imgEl = document.getElementById("tutorImg");
-  const qEl = document.getElementById("tutorQ");
-  const aEl = document.getElementById("tutorA");
-
-  if (!qEl || !aEl || !imgEl) return;
-  const question = (qEl.value || "").trim();
-  const file = imgEl.files?.[0] || null;
-
-  if (!question) return alert("Type a question.");
-  if (!file) return alert("Upload an image.");
-
-  try {
-    setTutorHint("Reading image...");
-    aEl.value = "";
-
-    const b64 = await fileToBase64NoPrefix(file);
-
-    setTutorHint("Talking to local AI (Ollama)...");
-    const prompt =
-`You are a school tutor. Use the image to answer the question accurately.
-- Explain briefly with steps.
-- If anything is unclear, ask one short clarification.
-Question: ${question}`;
-
-    const body = {
-      model: OLLAMA_MODEL,
-      stream: false,
-      messages: [{ role: "user", content: prompt, images: [b64] }]
-    };
-
-    const res = await fetch(OLLAMA_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      throw new Error(`Ollama error (${res.status}). ${t || "Is Ollama running?"}`);
-    }
-
-    const data = await res.json();
-    const out = data?.message?.content || "";
-    aEl.value = out || "(No response)";
-    setTutorHint("Done ✅");
-  } catch (err) {
-    console.error(err);
-    const msg = String(err?.message || "Tutor failed.");
-    if (msg.toLowerCase().includes("failed to fetch")) {
-      setTutorHint("Error: blocked or unreachable. Open the Hub via http://localhost and make sure Ollama is running.");
-    } else {
-      setTutorHint("Error: " + msg);
-    }
-  }
-};
-
-// ===============================
 // Render Tabs
 // ===============================
 function renderTab() {
@@ -969,13 +839,6 @@ function renderTab() {
     startRealtimeChat();
   }
 
-  if (currentTab === "tutor") {
-    sectionTitle.textContent = "Tutor";
-    if (newBtn) newBtn.style.display = "none";
-    if (sideCard) sideCard.style.display = "none";
-    sectionBody.innerHTML = tutorTemplate();
-  }
-
   if (currentTab === "admin") {
     sectionTitle.textContent = "Admin Panel";
     if (newBtn) newBtn.style.display = "none";
@@ -998,8 +861,7 @@ function renderTab() {
             • Admin can delete posts ✅<br/>
             • Admin can delete chat messages ✅<br/>
             • Admin can set nicknames ✅<br/>
-            • Owner can set their own nickname ✅<br/>
-            • Tutor (local AI) ✅
+            • Owner can set their own nickname ✅
           </div>
         </div>
       </div>
