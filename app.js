@@ -1,5 +1,5 @@
 // ===============================
-// THE HUB — app.js (v11 + Nicknames + Owner self-edit nick)
+// THE HUB — app.js (v12 + AI tab + Nicknames + Owner self-edit nick)
 // Fixes:
 // - Non-admin posts are ALWAYS pending (approval required)
 // - Click any post -> full view modal
@@ -7,6 +7,7 @@
 // - Admin can delete ANY post (approved or pending)
 // + Admin can set nicknames (displayed instead of email)
 // + Owner can set THEIR OWN nickname (was blocked)
+// + AI tab (calls /api/ai on your server - keeps key safe)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -673,6 +674,88 @@ window.setNickname = async function (uid, nickname) {
 // ===============================
 const CHAT_ROOM_ID = "theboys";
 
+function aiTemplate() {
+  return `
+    <div class="chatWrap">
+      <div class="chatList" id="aiList">
+        <div class="empty">Ask me anything…</div>
+      </div>
+
+      <div class="chatComposer">
+        <div class="chatInput">
+          <textarea class="input textarea" id="aiText" placeholder="Ask AI..." style="min-height:90px;"></textarea>
+          <div class="chatSmall" id="aiHint">Uses your server (keeps API key safe)</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px; min-width:220px;">
+          <button class="btn" onclick="sendAI()">Ask</button>
+          <button class="btn secondary" onclick="clearAI()">Clear</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function appendAI(role, text) {
+  const list = document.getElementById("aiList");
+  if (!list) return;
+
+  const who = role === "user" ? "You" : "AI";
+  const safe = escapeHTML(text);
+
+  list.innerHTML += `
+    <div class="chatMsg">
+      <div style="flex:1;">
+        <div class="chatMeta"><b>${who}</b></div>
+        <div class="chatText">${safe}</div>
+      </div>
+    </div>
+  `;
+  list.scrollTop = list.scrollHeight;
+}
+
+window.clearAI = function () {
+  const list = document.getElementById("aiList");
+  const hint = document.getElementById("aiHint");
+  if (list) list.innerHTML = `<div class="empty">Ask me anything…</div>`;
+  if (hint) hint.textContent = "Uses your server (keeps API key safe)";
+};
+
+window.sendAI = async function () {
+  const textEl = document.getElementById("aiText");
+  const hintEl = document.getElementById("aiHint");
+  if (!textEl) return;
+
+  const prompt = (textEl.value || "").trim();
+  if (!prompt) return;
+
+  textEl.value = "";
+  appendAI("user", prompt);
+  if (hintEl) hintEl.textContent = "Thinking...";
+
+  try {
+    // IMPORTANT: this hits YOUR server, not OpenAI directly
+    const res = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        uid: auth.currentUser?.uid || null
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "AI request failed.");
+
+    appendAI("assistant", data.text || "(no response)");
+    if (hintEl) hintEl.textContent = "Done ✅";
+  } catch (err) {
+    console.error(err);
+    appendAI("assistant", `Error: ${err.message}`);
+    if (hintEl) hintEl.textContent = "Error (check server logs)";
+  }
+};
+
 function chatTemplate() {
   return `
     <div class="chatWrap">
@@ -848,6 +931,13 @@ function renderTab() {
     startRealtimeAdminPanel();
   }
 
+  if (currentTab === "ai") {
+    sectionTitle.textContent = "AI";
+    if (newBtn) newBtn.style.display = "none";
+    if (sideCard) sideCard.style.display = "none";
+    sectionBody.innerHTML = aiTemplate();
+  }
+
   if (currentTab === "info") {
     sectionTitle.textContent = "Info";
     if (newBtn) newBtn.style.display = "none";
@@ -861,7 +951,8 @@ function renderTab() {
             • Admin can delete posts ✅<br/>
             • Admin can delete chat messages ✅<br/>
             • Admin can set nicknames ✅<br/>
-            • Owner can set their own nickname ✅
+            • Owner can set their own nickname ✅<br/>
+            • AI tab calls <b>/api/ai</b> on your server ✅
           </div>
         </div>
       </div>
