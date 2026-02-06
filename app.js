@@ -7,7 +7,7 @@
 // - Admin can delete ANY post (approved or pending)
 // + Admin can set nicknames (displayed instead of email)
 // + Owner can set THEIR OWN nickname (was blocked)
-// + AI tab (calls /api/ai on your server - keeps key safe)
+// + AI tab (calls Cloudflare Worker proxy - keeps API key safe)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -674,6 +674,9 @@ window.setNickname = async function (uid, nickname) {
 // ===============================
 const CHAT_ROOM_ID = "theboys";
 
+// ✅ Cloudflare Worker endpoint (your working URL)
+const AI_ENDPOINT = "https://the-hubthe-hub-ai.brayplaster7.workers.dev";
+
 function aiTemplate() {
   return `
     <div class="chatWrap">
@@ -684,7 +687,7 @@ function aiTemplate() {
       <div class="chatComposer">
         <div class="chatInput">
           <textarea class="input textarea" id="aiText" placeholder="Ask AI..." style="min-height:90px;"></textarea>
-          <div class="chatSmall" id="aiHint">Uses your server (keeps API key safe)</div>
+          <div class="chatSmall" id="aiHint">Uses Cloudflare Worker (API key stays secret)</div>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:10px; min-width:220px;">
@@ -718,7 +721,7 @@ window.clearAI = function () {
   const list = document.getElementById("aiList");
   const hint = document.getElementById("aiHint");
   if (list) list.innerHTML = `<div class="empty">Ask me anything…</div>`;
-  if (hint) hint.textContent = "Uses your server (keeps API key safe)";
+  if (hint) hint.textContent = "Uses Cloudflare Worker (API key stays secret)";
 };
 
 window.sendAI = async function () {
@@ -734,8 +737,8 @@ window.sendAI = async function () {
   if (hintEl) hintEl.textContent = "Thinking...";
 
   try {
-    // IMPORTANT: this hits YOUR server, not OpenAI directly
-    const res = await fetch("/api/ai", {
+    // ✅ calls your Cloudflare Worker, not /api/ai on GitHub Pages
+    const res = await fetch(AI_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -744,15 +747,19 @@ window.sendAI = async function () {
       })
     });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || "AI request failed.");
+    // ✅ robust parse (won't crash if response isn't JSON)
+    const raw = await res.text();
+    let data = {};
+    try { data = JSON.parse(raw); } catch {}
+
+    if (!res.ok) throw new Error(data?.error || raw || "AI request failed.");
 
     appendAI("assistant", data.text || "(no response)");
     if (hintEl) hintEl.textContent = "Done ✅";
   } catch (err) {
     console.error(err);
     appendAI("assistant", `Error: ${err.message}`);
-    if (hintEl) hintEl.textContent = "Error (check server logs)";
+    if (hintEl) hintEl.textContent = "Error (check worker logs)";
   }
 };
 
@@ -952,7 +959,7 @@ function renderTab() {
             • Admin can delete chat messages ✅<br/>
             • Admin can set nicknames ✅<br/>
             • Owner can set their own nickname ✅<br/>
-            • AI tab calls <b>/api/ai</b> on your server ✅
+            • AI tab calls <b>Cloudflare Worker</b> ✅
           </div>
         </div>
       </div>
