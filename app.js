@@ -7,7 +7,7 @@
 // - Admin can delete ANY post (approved or pending)
 // + Admin can set nicknames (displayed instead of email)
 // + Owner can set THEIR OWN nickname (was blocked)
-// + AI tab (calls Cloudflare Worker proxy - keeps API key safe)
+// + AI tab (calls your Cloudflare Worker /api/ai - keeps key safe)
 // ===============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -48,6 +48,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// ===============================
+// AI Endpoint (Cloudflare Worker)
+// ===============================
+// CHANGE THIS ONE LINE:
+const AI_ENDPOINT = "PUT_YOUR_CLOUDFLARE_WORKER_URL_HERE/api/ai";
 
 // ===============================
 // Cloudinary (filled)
@@ -561,7 +567,7 @@ function startRealtimeAdminPanel() {
             const isOwner = role === "owner";
             const isMe = auth.currentUser?.uid === uid;
 
-            // ✅ Only disable nickname editing if it's an owner AND not me
+            // Only disable nickname editing if it's an owner AND not me
             const nickDisabled = isOwner && !isMe;
 
             return `
@@ -662,7 +668,6 @@ window.unbanUser = async function (uid) {
 window.changeRole = async function (uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
 };
-
 window.setNickname = async function (uid, nickname) {
   if (!isAdmin()) return;
   const clean = String(nickname || "").trim();
@@ -673,95 +678,6 @@ window.setNickname = async function (uid, nickname) {
 // CHAT — The Boys (admin delete)
 // ===============================
 const CHAT_ROOM_ID = "theboys";
-
-// ✅ Cloudflare Worker endpoint (your working URL)
-const AI_ENDPOINT = "https://the-hubthe-hub-ai.brayplaster7.workers.dev";
-
-function aiTemplate() {
-  return `
-    <div class="chatWrap">
-      <div class="chatList" id="aiList">
-        <div class="empty">Ask me anything…</div>
-      </div>
-
-      <div class="chatComposer">
-        <div class="chatInput">
-          <textarea class="input textarea" id="aiText" placeholder="Ask AI..." style="min-height:90px;"></textarea>
-          <div class="chatSmall" id="aiHint">Uses Cloudflare Worker (API key stays secret)</div>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:10px; min-width:220px;">
-          <button class="btn" onclick="sendAI()">Ask</button>
-          <button class="btn secondary" onclick="clearAI()">Clear</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function appendAI(role, text) {
-  const list = document.getElementById("aiList");
-  if (!list) return;
-
-  const who = role === "user" ? "You" : "AI";
-  const safe = escapeHTML(text);
-
-  list.innerHTML += `
-    <div class="chatMsg">
-      <div style="flex:1;">
-        <div class="chatMeta"><b>${who}</b></div>
-        <div class="chatText">${safe}</div>
-      </div>
-    </div>
-  `;
-  list.scrollTop = list.scrollHeight;
-}
-
-window.clearAI = function () {
-  const list = document.getElementById("aiList");
-  const hint = document.getElementById("aiHint");
-  if (list) list.innerHTML = `<div class="empty">Ask me anything…</div>`;
-  if (hint) hint.textContent = "Uses Cloudflare Worker (API key stays secret)";
-};
-
-window.sendAI = async function () {
-  const textEl = document.getElementById("aiText");
-  const hintEl = document.getElementById("aiHint");
-  if (!textEl) return;
-
-  const prompt = (textEl.value || "").trim();
-  if (!prompt) return;
-
-  textEl.value = "";
-  appendAI("user", prompt);
-  if (hintEl) hintEl.textContent = "Thinking...";
-
-  try {
-    // ✅ calls your Cloudflare Worker, not /api/ai on GitHub Pages
-    const res = await fetch(AI_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt,
-        uid: auth.currentUser?.uid || null
-      })
-    });
-
-    // ✅ robust parse (won't crash if response isn't JSON)
-    const raw = await res.text();
-    let data = {};
-    try { data = JSON.parse(raw); } catch {}
-
-    if (!res.ok) throw new Error(data?.error || raw || "AI request failed.");
-
-    appendAI("assistant", data.text || "(no response)");
-    if (hintEl) hintEl.textContent = "Done ✅";
-  } catch (err) {
-    console.error(err);
-    appendAI("assistant", `Error: ${err.message}`);
-    if (hintEl) hintEl.textContent = "Error (check worker logs)";
-  }
-};
 
 function chatTemplate() {
   return `
@@ -894,6 +810,104 @@ window.deleteChatMsg = async function (messageId) {
 };
 
 // ===============================
+// AI TAB (calls Cloudflare Worker)
+// ===============================
+function aiTemplate() {
+  return `
+    <div class="chatWrap">
+      <div class="chatList" id="aiList">
+        <div class="empty">Ask me anything…</div>
+      </div>
+
+      <div class="chatComposer">
+        <div class="chatInput">
+          <textarea class="input textarea" id="aiText" placeholder="Ask AI..." style="min-height:90px;"></textarea>
+          <div class="chatSmall" id="aiHint">Uses your Worker (keeps API key safe)</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px; min-width:220px;">
+          <button class="btn" onclick="sendAI()">Ask</button>
+          <button class="btn secondary" onclick="clearAI()">Clear</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function appendAI(role, text) {
+  const list = document.getElementById("aiList");
+  if (!list) return;
+
+  const who = role === "user" ? "You" : "AI";
+  const safe = escapeHTML(text);
+
+  list.innerHTML += `
+    <div class="chatMsg">
+      <div style="flex:1;">
+        <div class="chatMeta"><b>${who}</b></div>
+        <div class="chatText">${safe}</div>
+      </div>
+    </div>
+  `;
+  list.scrollTop = list.scrollHeight;
+}
+
+window.clearAI = function () {
+  const list = document.getElementById("aiList");
+  const hint = document.getElementById("aiHint");
+  if (list) list.innerHTML = `<div class="empty">Ask me anything…</div>`;
+  if (hint) hint.textContent = "Uses your Worker (keeps API key safe)";
+};
+
+window.sendAI = async function () {
+  const textEl = document.getElementById("aiText");
+  const hintEl = document.getElementById("aiHint");
+  if (!textEl) return;
+
+  const prompt = (textEl.value || "").trim();
+  if (!prompt) return;
+
+  // basic guard so you don't forget endpoint
+  if (!AI_ENDPOINT || AI_ENDPOINT.includes("PUT_YOUR_CLOUDFLARE_WORKER_URL_HERE")) {
+    appendAI("assistant", "Error: AI endpoint not set. Edit app.js and set AI_ENDPOINT to your Worker URL.");
+    return;
+  }
+
+  textEl.value = "";
+  appendAI("user", prompt);
+  if (hintEl) hintEl.textContent = "Thinking...";
+
+  try {
+    const res = await fetch(AI_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        uid: auth.currentUser?.uid || null
+      })
+    });
+
+    // IMPORTANT: read raw text first so HTML errors don't crash JSON parsing
+    const raw = await res.text();
+    let data = null;
+    try { data = JSON.parse(raw); } catch {}
+
+    if (!res.ok) {
+      const msg = (data && (data.error || data.message)) ? (data.error || data.message) : raw.slice(0, 200);
+      throw new Error(msg || `AI request failed (${res.status})`);
+    }
+
+    const text = (data && data.text) ? data.text : raw;
+    appendAI("assistant", text || "(no response)");
+    if (hintEl) hintEl.textContent = "Done ✅";
+  } catch (err) {
+    console.error(err);
+    appendAI("assistant", `Error: ${err.message}`);
+    if (hintEl) hintEl.textContent = "Error (check Worker logs)";
+  }
+};
+
+// ===============================
 // Render Tabs
 // ===============================
 function renderTab() {
@@ -959,7 +973,7 @@ function renderTab() {
             • Admin can delete chat messages ✅<br/>
             • Admin can set nicknames ✅<br/>
             • Owner can set their own nickname ✅<br/>
-            • AI tab calls <b>Cloudflare Worker</b> ✅
+            • AI tab calls your Worker ✅
           </div>
         </div>
       </div>
