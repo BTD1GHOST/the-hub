@@ -53,7 +53,7 @@ const db = getFirestore(app);
 // AI Endpoint (Cloudflare Worker)
 // ===============================
 // CHANGE THIS ONE LINE:
-const AI_ENDPOINT = "PUT_YOUR_CLOUDFLARE_WORKER_URL_HERE/api/ai";
+const AI_ENDPOINT = "https://the-hubthe-hub-ai.brayplaster7.workers.dev/api/ai";
 
 // ===============================
 // Cloudinary (filled)
